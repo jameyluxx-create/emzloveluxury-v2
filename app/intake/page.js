@@ -71,6 +71,21 @@ const placeholderImages = [
   "/placeholders/Emzthumb-+AddDetails.png",
 ];
 
+// Category tags you can click
+const CATEGORY_OPTIONS = [
+  "Bag",
+  "Wallet / SLG",
+  "Accessory",
+  "Crossbody",
+  "Shoulder Bag",
+  "Tote",
+  "Backpack",
+  "Travel",
+  "Men",
+  "Women",
+  "Unisex",
+];
+
 export default function IntakePage() {
   const router = useRouter();
 
@@ -83,13 +98,11 @@ export default function IntakePage() {
   const [source, setSource] = useState("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
-  const [condition, setCondition] = useState("A");
-  const [notes, setNotes] = useState("");
+  const [condition, setCondition] = useState("A"); // N / A / B / C / D / U
+  const [notes, setNotes] = useState(""); // listing-style internal description
   const [cost, setCost] = useState("");
-  const [laborHours, setLaborHours] = useState("");
-  const [platform, setPlatform] = useState("");
-  const [category, setCategory] = useState("");
-  const [restorationNeeded, setRestorationNeeded] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [hashtags, setHashtags] = useState("");
 
   // 12 thumbnail slots
   const [images, setImages] = useState(Array(12).fill(null));
@@ -139,6 +152,72 @@ export default function IntakePage() {
     if (allListings) setGlobalInventory(allListings);
     if (myListings) setUserInventory(myListings);
   }
+
+  // Toggle category tags
+  function toggleCategory(tag) {
+    setSelectedCategories((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  }
+
+  // Build hashtags from source + categories (+ optional AI hashtags)
+  function buildHashtags(extraFromAI) {
+    const tags = [];
+
+    if (source && source.trim()) {
+      const normalizedSource = source
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "");
+      if (normalizedSource) {
+        tags.push(`#${normalizedSource}`);
+      }
+    }
+
+    selectedCategories.forEach((cat) => {
+      const normalizedCat = cat.toLowerCase().replace(/[^a-z0-9]+/g, "");
+      if (normalizedCat) {
+        tags.push(`#${normalizedCat}`);
+      }
+    });
+
+    if (extraFromAI) {
+      if (Array.isArray(extraFromAI)) {
+        extraFromAI.forEach((h) => {
+          const cleaned = String(h).trim();
+          if (cleaned) {
+            tags.push(cleaned.startsWith("#") ? cleaned : `#${cleaned}`);
+          }
+        });
+      } else if (typeof extraFromAI === "string") {
+        extraFromAI.split(/[,\s]+/).forEach((h) => {
+          const cleaned = h.trim();
+          if (cleaned) {
+            tags.push(cleaned.startsWith("#") ? cleaned : `#${cleaned}`);
+          }
+        });
+      }
+    }
+
+    const unique = Array.from(new Set(tags));
+    return unique.join(" ");
+  }
+
+  // Only auto-fill hashtags if user hasn't typed anything yet
+  function ensureHashtags(extraFromAI) {
+    setHashtags((prev) => {
+      if (prev && prev.trim().length > 0) {
+        return prev; // user already edited
+      }
+      return buildHashtags(extraFromAI);
+    });
+  }
+
+  // Rebuild hashtags when source or categories change (but don't overwrite user edits)
+  useEffect(() => {
+    ensureHashtags();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, selectedCategories]);
 
   // Clicking a slot → choose file → RESIZE → upload to Supabase → save public URL
   const handleReplaceImage = (slotIndex) => {
@@ -211,12 +290,31 @@ export default function IntakePage() {
 
       const result = await response.json();
 
-      // Only fill fields that are currently empty (basic hybrid behavior for now)
+      // Only fill fields that are currently empty (hybrid behavior)
       if (result.brand) setBrand((prev) => prev || result.brand);
       if (result.model) setModel((prev) => prev || result.model);
-      if (result.category) setCategory((prev) => prev || result.category);
-      if (result.condition) setCondition((prev) => prev || result.condition);
-      if (result.description) setNotes((prev) => prev || result.description);
+
+      if (result.category) {
+        setSelectedCategories((prev) =>
+          prev.length > 0 ? prev : [result.category]
+        );
+      }
+
+      if (result.condition) {
+        setCondition((prev) => prev || result.condition);
+      }
+
+      if (result.description) {
+        // treat as listing-style internal notes
+        setNotes((prev) => prev || result.description);
+      }
+
+      // If AI returns hashtags, feed them into our generator
+      if (result.hashtags) {
+        ensureHashtags(result.hashtags);
+      } else {
+        ensureHashtags();
+      }
     } catch (err) {
       console.error(err);
       alert("AI lookup failed.");
@@ -246,10 +344,13 @@ export default function IntakePage() {
       condition,
       notes,
       cost: cost ? Number(cost) : null,
-      labor_hours: laborHours ? Number(laborHours) : null,
-      platform: platform || null,
-      category: category || null,
-      restoration_needed: restorationNeeded || null,
+      // Save categories as comma-separated string for now
+      category:
+        selectedCategories.length > 0
+          ? selectedCategories.join(", ")
+          : null,
+      // hashtags are currently kept client-side; we can wire them
+      // into the DB later once the schema has a column for them.
       images: images.filter((img) => img !== null),
     };
 
@@ -266,7 +367,6 @@ export default function IntakePage() {
       return;
     }
 
-    // New listing row returned from Supabase
     const newListing = data;
 
     setSuccessMsg("Item saved — Ready to Sell ✅");
@@ -279,10 +379,8 @@ export default function IntakePage() {
     setCondition("A");
     setNotes("");
     setCost("");
-    setLaborHours("");
-    setPlatform("");
-    setCategory("");
-    setRestorationNeeded("");
+    setSelectedCategories([]);
+    setHashtags("");
     setImages(Array(12).fill(null));
 
     // Refresh inventory lists
@@ -292,7 +390,6 @@ export default function IntakePage() {
 
     // Go to listing page for sales logistics
     if (newListing?.id) {
-      // Assumes you'll create app/listing/[id]/page.js later
       router.push(`/listing/${newListing.id}`);
     }
   }
@@ -300,7 +397,6 @@ export default function IntakePage() {
   // ---------------- RENDER ----------------
 
   if (!authChecked) {
-    // Simple loading state while we check auth
     return (
       <div
         style={{
@@ -317,7 +413,6 @@ export default function IntakePage() {
   }
 
   if (!currentUser) {
-    // User not logged in
     return (
       <div
         style={{
@@ -447,7 +542,7 @@ export default function IntakePage() {
       {/* Item details */}
       <div
         style={{
-          maxWidth: "480px",
+          maxWidth: "520px",
           padding: "16px",
           background: "#ffffff",
           borderRadius: "10px",
@@ -518,7 +613,7 @@ export default function IntakePage() {
           value={brand}
           onChange={(e) => setBrand(e.target.value)}
           style={inputStyle}
-          placeholder="Chloe, Gucci, LV…"
+          placeholder="Chanel, Chloe, Gucci, LV…"
         />
 
         <label style={labelStyle}>Model / Style</label>
@@ -529,30 +624,69 @@ export default function IntakePage() {
           placeholder="Soho Disco, WOC, Zippy Wallet…"
         />
 
-        <label style={labelStyle}>Category</label>
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          style={inputStyle}
-        >
-          <option value="">Select</option>
-          <option value="bag">Bag</option>
-          <option value="wallet">Wallet / SLG</option>
-          <option value="accessory">Accessory</option>
-          <option value="other">Other</option>
-        </select>
+        {/* Category tags */}
+        <div style={{ marginTop: 4, marginBottom: 8 }}>
+          <label style={labelStyle}>Category tags</label>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "6px",
+              marginBottom: "6px",
+            }}
+          >
+            {CATEGORY_OPTIONS.map((tag) => {
+              const selected = selectedCategories.includes(tag);
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleCategory(tag)}
+                  style={{
+                    padding: "4px 8px",
+                    fontSize: "11px",
+                    borderRadius: "999px",
+                    border: selected
+                      ? "1px solid #0f172a"
+                      : "1px solid #cbd5e1",
+                    background: selected ? "#0f172a" : "#f8fafc",
+                    color: selected ? "#f9fafb" : "#0f172a",
+                    cursor: "pointer",
+                  }}
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+          {selectedCategories.length > 0 && (
+            <div
+              style={{
+                fontSize: "10px",
+                color: "#64748b",
+              }}
+            >
+              Selected: {selectedCategories.join(", ")}
+            </div>
+          )}
+        </div>
 
-        <label style={labelStyle}>Condition (A–E)</label>
+        <label style={labelStyle}>Condition (N / A / B / C / D / U)</label>
         <select
           value={condition}
           onChange={(e) => setCondition(e.target.value)}
           style={inputStyle}
         >
-          <option value="A">A — Store ready</option>
-          <option value="B">B — Light wear</option>
-          <option value="C">C — Needs cleaning / hardware</option>
-          <option value="D">D — Restoration project</option>
-          <option value="E">E — Parts / salvage</option>
+          <option value="N">N — New or Unused</option>
+          <option value="A">A — Pristine Condition</option>
+          <option value="B">
+            B — Excellent Preloved, Minor Call Outs
+          </option>
+          <option value="C">
+            C — Functional, with Signs of Usage
+          </option>
+          <option value="D">D — Project</option>
+          <option value="U">U — Contemporary Brand</option>
         </select>
 
         <label style={labelStyle}>Cost (landed)</label>
@@ -564,37 +698,20 @@ export default function IntakePage() {
           placeholder="85.00"
         />
 
-        <label style={labelStyle}>Labor hours (estimated)</label>
-        <input
-          type="number"
-          value={laborHours}
-          onChange={(e) => setLaborHours(e.target.value)}
-          style={inputStyle}
-          placeholder="e.g. 1.5"
-        />
-
-        <label style={labelStyle}>Platform / planned sale channel</label>
-        <input
-          value={platform}
-          onChange={(e) => setPlatform(e.target.value)}
-          style={inputStyle}
-          placeholder="Whatnot, EMZLoveLuxury.com, eBay, etc."
-        />
-
-        <label style={labelStyle}>Restoration needed (summary)</label>
-        <input
-          value={restorationNeeded}
-          onChange={(e) => setRestorationNeeded(e.target.value)}
-          style={inputStyle}
-          placeholder="Clean vachetta, re-plate hardware, interior dye…"
-        />
-
-        <label style={labelStyle}>Internal notes</label>
+        <label style={labelStyle}>Internal notes / listing draft</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          style={{ ...inputStyle, minHeight: "90px", resize: "vertical" }}
-          placeholder="AI can help fill this, then you tweak for listing…"
+          style={{ ...inputStyle, minHeight: "110px", resize: "vertical" }}
+          placeholder="AI will generate a listing-style description including brand, model, material, color, features, and selling points. You can tweak it here."
+        />
+
+        <label style={labelStyle}>Hashtags (AI + manual)</label>
+        <textarea
+          value={hashtags}
+          onChange={(e) => setHashtags(e.target.value)}
+          style={{ ...inputStyle, minHeight: "70px", resize: "vertical" }}
+          placeholder="#buyee #bag #crossbody #blackleather #goldhardware"
         />
 
         <button
