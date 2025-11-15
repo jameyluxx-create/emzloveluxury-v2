@@ -101,7 +101,7 @@ export default function IntakePage() {
   const [condition, setCondition] = useState("A"); // N / A / B / C / D / U
   const [notes, setNotes] = useState(""); // listing-style internal description
   const [cost, setCost] = useState("");
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState([]);
   const [hashtags, setHashtags] = useState("");
 
   // 12 thumbnail slots
