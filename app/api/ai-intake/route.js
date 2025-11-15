@@ -5,10 +5,13 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Helper function to build an AI prompt that matches our schema
+// Build the prompt for the model
 function buildPrompt(imageUrls) {
   return `
-You are EMZLoveLuxury AI — a professional luxury item identifier that must always follow this schema:
+You are EMZLoveLuxury AI — a professional luxury item identifier and pricing assistant.
+
+You MUST respond with VALID JSON ONLY. No markdown, no comments, no extra text.
+Use this exact schema and include ALL keys:
 
 {
   "identity": {
@@ -38,9 +41,9 @@ You are EMZLoveLuxury AI — a professional luxury item identifier that must alw
     "retail_price": null,
     "comp_low": null,
     "comp_high": null,
-    "recommended_price": null,
-    "suggested_whatnot_start": null,
-    "comp_sources": []
+    "recommended_listing": null,
+    "whatnot_start": null,
+    "sources": []
   },
   "seo": {
     "keywords": [],
@@ -52,32 +55,39 @@ You are EMZLoveLuxury AI — a professional luxury item identifier that must alw
 }
 
 TASKS:
-1. Look at the photos and identify the item:
-   - brand, model, style, color, material, hardware, pattern, year range
+1. Look carefully at all provided photos and identify:
+   - brand, model, style, color, material, hardware, pattern, and approximate year range.
+   - primary category (bag, wallet/SLG, accessory, other) plus any useful secondary categories.
 
-2. Search the web for matching listings (Fashionphile, TRR, Rebag, Vestiaire, eBay, etc.)
-   - extract dimensions
-   - extract included items
-   - extract comps (3–6 real examples)
-   - extract retail price if available
+2. Imagine you can also search common luxury resale sites
+   (Fashionphile, Rebag, The RealReal, Vestiaire, eBay, etc.) for this item or extremely similar items.
+   From those imaginary matches, infer:
+   - typical dimensions (length, height, depth, strap drop).
+   - common included items (dust bag, card, strap, box, paperwork).
 
-3. Build a sales-forward description (1–3 short paragraphs)
-   - written in a way a live seller can speak fluently
+3. Build a sales-forward description (1–2 short paragraphs) that a live seller can read out loud smoothly.
+   Also provide 5–10 short bullet points in "feature_bullets".
 
-4. Build 5–10 feature bullets
+4. Pricing:
+   - Estimate a realistic retail price for this model if known (or null if unknown).
+   - Estimate a reasonable low comp (comp_low) and high comp (comp_high) in USD.
+   - Suggest a recommended listing price in USD for a good condition example (recommended_listing).
+   - Suggest a Whatnot auction starting price in USD (whatnot_start).
+   - "sources" can be an array of short text notes like
+     ["Based on similar sold listings on major resale platforms"].
 
-5. Generate SEO metadata:
-   - short meta title
-   - meta description (max 150 chars)
-   - keywords list
-   - hashtags list
-   - slug (URL-safe)
+5. SEO:
+   - keywords: array of important search phrases.
+   - hashtags: array of social hashtags (no "#", just words like "prada", "saffiano", "crossbody").
+   - meta_title: short SEO title including brand and model.
+   - meta_description: 1 short sentence (max ~150 characters).
+   - slug: URL-safe slug like "prada-saffiano-red-wallet".
 
-6. Return JSON ONLY — no commentary, no text outside JSON.
+Return ONLY the JSON object, nothing else.
 
-Images provided:
+Images provided (URLs):
 ${imageUrls.join("\n")}
-  `;
+`;
 }
 
 export async function POST(req) {
@@ -85,48 +95,67 @@ export async function POST(req) {
     const body = await req.json();
     const { imageUrls } = body;
 
-    if (!imageUrls || imageUrls.length === 0) {
+    if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
       return NextResponse.json(
         { error: "No images provided." },
         { status: 400 }
       );
     }
 
-    // AI CALL
-    const response = await openai.chat.completions.create({
-      model: "gpt-4.1", // full intelligence mode
+    // Call OpenAI with correct multimodal format
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      temperature: 0.3,
       messages: [
         {
           role: "user",
           content: [
-            { type: "text", text: buildPrompt(imageUrls) },
+            {
+              type: "input_text",
+              text: buildPrompt(imageUrls),
+            },
             ...imageUrls.map((url) => ({
               type: "input_image",
-              image_url: url,
+              image_url: { url },
             })),
           ],
         },
       ],
-      temperature: 0.3,
     });
 
-    const rawOutput = response.choices[0].message.content;
+    const raw = completion.choices?.[0]?.message?.content || "";
 
-    // Ensure JSON is parsed safely
+    // Try to extract pure JSON from the model output
+    let jsonString = raw.trim();
+    const firstBrace = jsonString.indexOf("{");
+    const lastBrace = jsonString.lastIndexOf("}");
+
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      jsonString = jsonString.slice(firstBrace, lastBrace + 1);
+    }
+
     let parsed;
     try {
-      parsed = JSON.parse(rawOutput);
+      parsed = JSON.parse(jsonString);
     } catch (err) {
-      console.error("JSON parse error:", err);
+      console.error("JSON parse error from AI:", err, "RAW:", raw);
       return NextResponse.json(
-        { error: "Invalid AI JSON format.", raw: rawOutput },
+        { error: "Invalid JSON from AI.", raw },
         { status: 500 }
       );
+    }
+
+    // Basic shape check
+    if (!parsed.identity || !parsed.description || !parsed.pricing) {
+      console.warn("AI JSON missing expected keys:", parsed);
     }
 
     return NextResponse.json({ success: true, data: parsed });
   } catch (err) {
     console.error("AI Intake Route Error:", err);
-    return NextResponse.json({ error: "AI processing failed." }, { status: 500 });
+    return NextResponse.json(
+      { error: "AI processing failed.", details: String(err) },
+      { status: 500 }
+    );
   }
 }
