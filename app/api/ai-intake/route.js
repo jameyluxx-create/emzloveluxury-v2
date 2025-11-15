@@ -102,7 +102,7 @@ export async function POST(req) {
       );
     }
 
-    // Call OpenAI with correct multimodal format
+    // Correct multimodal format: type: "text" and type: "image_url"
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
       temperature: 0.3,
@@ -111,11 +111,11 @@ export async function POST(req) {
           role: "user",
           content: [
             {
-              type: "input_text",
+              type: "text",
               text: buildPrompt(imageUrls),
             },
             ...imageUrls.map((url) => ({
-              type: "input_image",
+              type: "image_url",
               image_url: { url },
             })),
           ],
@@ -123,10 +123,28 @@ export async function POST(req) {
       ],
     });
 
-    const raw = completion.choices?.[0]?.message?.content || "";
+    const content = completion?.choices?.[0]?.message?.content;
+    let raw = "";
+
+    // Newer API can return content as string or as array of content parts
+    if (typeof content === "string") {
+      raw = content;
+    } else if (Array.isArray(content)) {
+      raw = content
+        .map((part) => {
+          if (typeof part === "string") return part;
+          if (part.type === "text" && part.text) return part.text;
+          return "";
+        })
+        .join("\n");
+    } else {
+      raw = "";
+    }
+
+    raw = (raw || "").trim();
 
     // Try to extract pure JSON from the model output
-    let jsonString = raw.trim();
+    let jsonString = raw;
     const firstBrace = jsonString.indexOf("{");
     const lastBrace = jsonString.lastIndexOf("}");
 
@@ -143,11 +161,6 @@ export async function POST(req) {
         { error: "Invalid JSON from AI.", raw },
         { status: 500 }
       );
-    }
-
-    // Basic shape check
-    if (!parsed.identity || !parsed.description || !parsed.pricing) {
-      console.warn("AI JSON missing expected keys:", parsed);
     }
 
     return NextResponse.json({ success: true, data: parsed });
