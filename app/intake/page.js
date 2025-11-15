@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
 
 // ---------- helper: resize image on client before upload ----------
@@ -71,38 +70,28 @@ const placeholderImages = [
   "/placeholders/Emzthumb-+AddDetails.png",
 ];
 
-// Category tags you can click
-const CATEGORY_OPTIONS = [
-  "Bag",
-  "Wallet / SLG",
-  "Accessory",
-  "Crossbody",
-  "Shoulder Bag",
-  "Tote",
-  "Backpack",
-  "Travel",
-  "Men",
-  "Women",
-  "Unisex",
-];
-
 export default function IntakePage() {
-  const router = useRouter();
-
-  // Auth
-  const [currentUser, setCurrentUser] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
+  // TODO: replace this with real auth user id later
+  const currentUserId = "demo-user-123";
 
   // Form fields
   const [itemNumber, setItemNumber] = useState("");
   const [source, setSource] = useState("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
-  const [condition, setCondition] = useState("A"); // N / A / B / C / D / U
-  const [notes, setNotes] = useState(""); // listing-style internal description
+  const [condition, setCondition] = useState("A");
+  const [notes, setNotes] = useState("");
   const [cost, setCost] = useState("");
-  const [selectedCategories, setSelectedCategories] = useState([]);
-  const [hashtags, setHashtags] = useState("");
+  const [laborHours, setLaborHours] = useState("");
+  const [platform, setPlatform] = useState("");
+  const [category, setCategory] = useState("");
+  const [restorationNeeded, setRestorationNeeded] = useState("");
+
+  // "List for sale now" toggle
+  const [listForSale, setListForSale] = useState(false);
+
+  // Holds the full AI schema output so we can save identity/dimensions/pricing/seo
+  const [aiData, setAiData] = useState(null);
 
   // 12 thumbnail slots
   const [images, setImages] = useState(Array(12).fill(null));
@@ -117,27 +106,11 @@ export default function IntakePage() {
   const [userInventory, setUserInventory] = useState([]);
   const [globalInventory, setGlobalInventory] = useState([]);
 
-  // Load auth + inventory
   useEffect(() => {
-    async function init() {
-      const { data, error } = await supabase.auth.getUser();
-
-      if (!error && data?.user) {
-        setCurrentUser(data.user);
-        await loadInventory(data.user.id);
-      } else {
-        setCurrentUser(null);
-      }
-
-      setAuthChecked(true);
-    }
-
-    init();
+    loadInventory();
   }, []);
 
-  async function loadInventory(userId) {
-    if (!userId) return;
-
+  async function loadInventory() {
     const { data: allListings } = await supabase
       .from("listings")
       .select("*")
@@ -146,78 +119,12 @@ export default function IntakePage() {
     const { data: myListings } = await supabase
       .from("listings")
       .select("*")
-      .eq("user_id", userId)
+      .eq("user_id", currentUserId)
       .order("created_at", { ascending: false });
 
     if (allListings) setGlobalInventory(allListings);
     if (myListings) setUserInventory(myListings);
   }
-
-  // Toggle category tags
-  function toggleCategory(tag) {
-    setSelectedCategories((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
-  }
-
-  // Build hashtags from source + categories (+ optional AI hashtags)
-  function buildHashtags(extraFromAI) {
-    const tags = [];
-
-    if (source && source.trim()) {
-      const normalizedSource = source
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "");
-      if (normalizedSource) {
-        tags.push(`#${normalizedSource}`);
-      }
-    }
-
-    selectedCategories.forEach((cat) => {
-      const normalizedCat = cat.toLowerCase().replace(/[^a-z0-9]+/g, "");
-      if (normalizedCat) {
-        tags.push(`#${normalizedCat}`);
-      }
-    });
-
-    if (extraFromAI) {
-      if (Array.isArray(extraFromAI)) {
-        extraFromAI.forEach((h) => {
-          const cleaned = String(h).trim();
-          if (cleaned) {
-            tags.push(cleaned.startsWith("#") ? cleaned : `#${cleaned}`);
-          }
-        });
-      } else if (typeof extraFromAI === "string") {
-        extraFromAI.split(/[,\s]+/).forEach((h) => {
-          const cleaned = h.trim();
-          if (cleaned) {
-            tags.push(cleaned.startsWith("#") ? cleaned : `#${cleaned}`);
-          }
-        });
-      }
-    }
-
-    const unique = Array.from(new Set(tags));
-    return unique.join(" ");
-  }
-
-  // Only auto-fill hashtags if user hasn't typed anything yet
-  function ensureHashtags(extraFromAI) {
-    setHashtags((prev) => {
-      if (prev && prev.trim().length > 0) {
-        return prev; // user already edited
-      }
-      return buildHashtags(extraFromAI);
-    });
-  }
-
-  // Rebuild hashtags when source or categories change (but don't overwrite user edits)
-  useEffect(() => {
-    ensureHashtags();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, selectedCategories]);
 
   // Clicking a slot → choose file → RESIZE → upload to Supabase → save public URL
   const handleReplaceImage = (slotIndex) => {
@@ -231,8 +138,7 @@ export default function IntakePage() {
 
       try {
         const resizedBlob = await resizeImage(file, 1200, 0.8);
-        const userFolder = currentUser?.id || "guest";
-        const filePath = `${userFolder}/${Date.now()}-${slotIndex}.jpg`;
+        const filePath = `${currentUserId}/${Date.now()}-${slotIndex}.jpg`;
 
         const { error: uploadError } = await supabase.storage
           .from("intake-photos")
@@ -266,7 +172,7 @@ export default function IntakePage() {
     input.click();
   };
 
-  // AI lookup: use ALL uploaded photos (not just first)
+  // ---------- AI lookup: use ALL uploaded photos (not just first) ----------
   async function runAI() {
     const aiImages = images.filter((x) => x && x.url).map((x) => x.url);
 
@@ -290,31 +196,37 @@ export default function IntakePage() {
 
       const result = await response.json();
 
-      // Only fill fields that are currently empty (hybrid behavior)
-      if (result.brand) setBrand((prev) => prev || result.brand);
-      if (result.model) setModel((prev) => prev || result.model);
-
-      if (result.category) {
-        setSelectedCategories((prev) =>
-          prev.length > 0 ? prev : [result.category]
-        );
+      if (!result.success || !result.data) {
+        console.error("AI result missing data", result);
+        alert("AI lookup did not return structured data.");
+        return;
       }
 
-      if (result.condition) {
-        setCondition((prev) => prev || result.condition);
+      const data = result.data;
+      setAiData(data); // save full schema for handleSave()
+
+      const identity = data.identity || {};
+      const description = data.description || {};
+      const dimensions = data.dimensions || {};
+      const included = data.included_items || [];
+
+      // Only fill fields that are currently empty (user override wins)
+      if (identity.brand) setBrand((prev) => prev || identity.brand);
+      if (identity.model) setModel((prev) => prev || identity.model);
+      if (identity.category_primary) {
+        setCategory((prev) => prev || identity.category_primary);
       }
 
-      if (result.description) {
-        // treat as listing-style internal notes
-        setNotes((prev) => prev || result.description);
+      // Put the sales-forward description into notes if notes are empty
+      if (description.sales_forward) {
+        setNotes((prev) => prev || description.sales_forward);
       }
 
-      // If AI returns hashtags, feed them into our generator
-      if (result.hashtags) {
-        ensureHashtags(result.hashtags);
-      } else {
-        ensureHashtags();
-      }
+      // If cost is empty but pricing suggests something, we leave it for now
+      // (You can decide later whether to auto-fill cost or just listing price.)
+
+      console.log("AI dimensions:", dimensions);
+      console.log("AI included items:", included);
     } catch (err) {
       console.error(err);
       alert("AI lookup failed.");
@@ -323,20 +235,38 @@ export default function IntakePage() {
     }
   }
 
-  // Save to Supabase and go to listing page
+  // ---------- Save to Supabase ----------
   async function handleSave() {
     setIsSaving(true);
     setErrorMsg("");
     setSuccessMsg("");
 
-    if (!currentUser) {
-      setErrorMsg("Please log in to save this item.");
-      setIsSaving(false);
-      return;
-    }
+    // Build identity/dimensions/etc from aiData if available
+    const identity = aiData?.identity || {
+      brand: brand || null,
+      model: model || null,
+      style: null,
+      color: null,
+      material: null,
+      hardware: null,
+      pattern: null,
+      year_range: null,
+      category_primary: category || null,
+      category_secondary: [],
+    };
+
+    const dimensions = aiData?.dimensions || null;
+    const included_items = aiData?.included_items || null;
+    const pricing = aiData?.pricing || null;
+    const seo = aiData?.seo
+      ? { ...aiData.seo, user_override: false }
+      : null;
+
+    const imagesPayload = images.filter((img) => img !== null);
 
     const payload = {
-      user_id: currentUser.id,
+      user_id: currentUserId,
+      sku: itemNumber || null,
       item_number: itemNumber || null,
       source: source || null,
       brand: brand || null,
@@ -344,109 +274,58 @@ export default function IntakePage() {
       condition,
       notes,
       cost: cost ? Number(cost) : null,
-      // Save categories as comma-separated string for now
-      category:
-        selectedCategories.length > 0
-          ? selectedCategories.join(", ")
-          : null,
-      // hashtags are currently kept client-side; we can wire them
-      // into the DB later once the schema has a column for them.
-      images: images.filter((img) => img !== null),
+      labor_hours: laborHours ? Number(laborHours) : null,
+      platform: platform || null,
+      category: category || null,
+      restoration_needed: restorationNeeded || null,
+      images: imagesPayload,
+
+      // new schema fields
+      status: listForSale ? "ready_to_sell" : "intake",
+      is_public: listForSale,
+      identity,
+      dimensions,
+      included_items,
+      pricing,
+      seo,
     };
 
-    const { data, error } = await supabase
-      .from("listings")
-      .insert(payload)
-      .select()
-      .single();
+    const { error } = await supabase.from("listings").insert(payload);
 
     if (error) {
       console.error(error);
       setErrorMsg("Could not save item.");
-      setIsSaving(false);
-      return;
+    } else {
+      setSuccessMsg(
+        listForSale
+          ? "Item added to inventory and marked ready to list ✅"
+          : "Item saved to EMZlove inventory ✅"
+      );
+
+      // Clear form for next intake
+      setItemNumber("");
+      setSource("");
+      setBrand("");
+      setModel("");
+      setCondition("A");
+      setNotes("");
+      setCost("");
+      setLaborHours("");
+      setPlatform("");
+      setCategory("");
+      setRestorationNeeded("");
+      setImages(Array(12).fill(null));
+      setListForSale(false);
+      setAiData(null);
+
+      // Refresh inventory lists
+      loadInventory();
     }
-
-    const newListing = data;
-
-    setSuccessMsg("Item saved — Ready to Sell ✅");
-
-    // Clear form for next intake
-    setItemNumber("");
-    setSource("");
-    setBrand("");
-    setModel("");
-    setCondition("A");
-    setNotes("");
-    setCost("");
-    setSelectedCategories([]);
-    setHashtags("");
-    setImages(Array(12).fill(null));
-
-    // Refresh inventory lists
-    await loadInventory(currentUser.id);
 
     setIsSaving(false);
-
-    // Go to listing page for sales logistics
-    if (newListing?.id) {
-      router.push(`/listing/${newListing.id}`);
-    }
   }
 
   // ---------------- RENDER ----------------
-
-  if (!authChecked) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "#f1f5f9",
-          color: "#0f172a",
-          padding: "16px",
-          fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-        }}
-      >
-        <p style={{ fontSize: "13px" }}>Checking your login…</p>
-      </div>
-    );
-  }
-
-  if (!currentUser) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "#f1f5f9",
-          color: "#0f172a",
-          padding: "16px",
-          fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-        }}
-      >
-        <h1 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "8px" }}>
-          EMZlove Luxury — Intake
-        </h1>
-        <p style={{ fontSize: "12px", color: "#64748b", marginBottom: "12px" }}>
-          Please log in to use the intake page.
-        </p>
-        <button
-          onClick={() => router.push("/login")}
-          style={{
-            padding: "8px 14px",
-            background: "#0f172a",
-            color: "#fff",
-            borderRadius: "6px",
-            fontSize: "13px",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          Go to login
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div
       style={{
@@ -461,7 +340,7 @@ export default function IntakePage() {
         EMZlove Luxury — Intake
       </h1>
       <p style={{ fontSize: "11px", color: "#64748b", marginBottom: "16px" }}>
-        12-photo intake grid • AI lookup • Supabase save • Ready-to-sell flow.
+        12-photo intake grid • AI lookup • Supabase save.
       </p>
 
       {/* AI button */}
@@ -542,7 +421,7 @@ export default function IntakePage() {
       {/* Item details */}
       <div
         style={{
-          maxWidth: "520px",
+          maxWidth: "480px",
           padding: "16px",
           background: "#ffffff",
           borderRadius: "10px",
@@ -580,7 +459,9 @@ export default function IntakePage() {
         </div>
 
         {errorMsg && (
-          <p style={{ fontSize: "11px", color: "#b91c1c", marginBottom: "6px" }}>
+          <p
+            style={{ fontSize: "11px", color: "#b91c1c", marginBottom: "6px" }}
+          >
             {errorMsg}
           </p>
         )}
@@ -613,7 +494,7 @@ export default function IntakePage() {
           value={brand}
           onChange={(e) => setBrand(e.target.value)}
           style={inputStyle}
-          placeholder="Chanel, Chloe, Gucci, LV…"
+          placeholder="Chanel, Gucci, Lois Vuitton, Fendi…"
         />
 
         <label style={labelStyle}>Model / Style</label>
@@ -621,55 +502,21 @@ export default function IntakePage() {
           value={model}
           onChange={(e) => setModel(e.target.value)}
           style={inputStyle}
-          placeholder="Soho Disco, WOC, Zippy Wallet…"
+          placeholder="Shoulder, Crossbody, Sling, Wallet…"
         />
 
-        {/* Category tags */}
-        <div style={{ marginTop: 4, marginBottom: 8 }}>
-          <label style={labelStyle}>Category tags</label>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "6px",
-              marginBottom: "6px",
-            }}
-          >
-            {CATEGORY_OPTIONS.map((tag) => {
-              const selected = selectedCategories.includes(tag);
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => toggleCategory(tag)}
-                  style={{
-                    padding: "4px 8px",
-                    fontSize: "11px",
-                    borderRadius: "999px",
-                    border: selected
-                      ? "1px solid #0f172a"
-                      : "1px solid #cbd5e1",
-                    background: selected ? "#0f172a" : "#f8fafc",
-                    color: selected ? "#f9fafb" : "#0f172a",
-                    cursor: "pointer",
-                  }}
-                >
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
-          {selectedCategories.length > 0 && (
-            <div
-              style={{
-                fontSize: "10px",
-                color: "#64748b",
-              }}
-            >
-              Selected: {selectedCategories.join(", ")}
-            </div>
-          )}
-        </div>
+        <label style={labelStyle}>Category</label>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          style={inputStyle}
+        >
+          <option value="">Select</option>
+          <option value="bag">Bag</option>
+          <option value="wallet">Wallet / SLG</option>
+          <option value="accessory">Accessory</option>
+          <option value="other">Other</option>
+        </select>
 
         <label style={labelStyle}>Condition (N / A / B / C / D / U)</label>
         <select
@@ -677,15 +524,11 @@ export default function IntakePage() {
           onChange={(e) => setCondition(e.target.value)}
           style={inputStyle}
         >
-          <option value="N">N — New or Unused</option>
-          <option value="A">A — Pristine Condition</option>
-          <option value="B">
-            B — Excellent Preloved, Minor Call Outs
-          </option>
-          <option value="C">
-            C — Functional, with Signs of Usage
-          </option>
-          <option value="D">D — Project</option>
+          <option value="N">N — New</option>
+          <option value="A">A — Pristine/Unused</option>
+          <option value="B">B — Excellent Preloved</option>
+          <option value="C">C — Functional, Signs of Usage</option>
+          <option value="D">D — Project / No Public Listing</option>
           <option value="U">U — Contemporary Brand</option>
         </select>
 
@@ -698,21 +541,56 @@ export default function IntakePage() {
           placeholder="85.00"
         />
 
+        <label style={labelStyle}>Labor hours (estimated)</label>
+        <input
+          type="number"
+          value={laborHours}
+          onChange={(e) => setLaborHours(e.target.value)}
+          style={inputStyle}
+          placeholder="e.g. 1.5"
+        />
+
+        <label style={labelStyle}>Platform / planned sale channel</label>
+        <input
+          value={platform}
+          onChange={(e) => setPlatform(e.target.value)}
+          style={inputStyle}
+          placeholder="Whatnot, EMZLoveLuxury.com, eBay, etc."
+        />
+
+        <label style={labelStyle}>Restoration needed (summary)</label>
+        <input
+          value={restorationNeeded}
+          onChange={(e) => setRestorationNeeded(e.target.value)}
+          style={inputStyle}
+          placeholder="Clean vachetta, re-plate hardware, interior dye…"
+        />
+
         <label style={labelStyle}>Internal notes / listing draft</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          style={{ ...inputStyle, minHeight: "110px", resize: "vertical" }}
-          placeholder="AI will generate a listing-style description including brand, model, material, color, features, and selling points. You can tweak it here."
+          style={{ ...inputStyle, minHeight: "90px", resize: "vertical" }}
+          placeholder="AI can help fill this, then you tweak for listing…"
         />
 
-        <label style={labelStyle}>Hashtags (AI + manual)</label>
-        <textarea
-          value={hashtags}
-          onChange={(e) => setHashtags(e.target.value)}
-          style={{ ...inputStyle, minHeight: "70px", resize: "vertical" }}
-          placeholder="#buyee #bag #crossbody #blackleather #goldhardware"
-        />
+        {/* List for sale toggle */}
+        <div
+          style={{
+            marginTop: "8px",
+            marginBottom: "4px",
+            fontSize: "11px",
+          }}
+        >
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={listForSale}
+              onChange={(e) => setListForSale(e.target.checked)}
+            />
+            <span>List for sale now (create public listing)</span>
+          </label>
+        </div>
 
         <button
           onClick={handleSave}
@@ -728,7 +606,7 @@ export default function IntakePage() {
             cursor: "pointer",
           }}
         >
-          {isSaving ? "Saving…" : "Ready to Sell"}
+          {isSaving ? "Saving…" : "Add to Inventory"}
         </button>
       </div>
 
@@ -799,6 +677,7 @@ export default function IntakePage() {
                   <div style={{ fontSize: "10px", color: "#64748b" }}>
                     {item.item_number ? `#${item.item_number} • ` : ""}
                     {item.source || "—"}
+                    {item.is_public ? " • PUBLIC" : " • PRIVATE"}
                   </div>
                 </div>
               </li>
