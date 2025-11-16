@@ -90,25 +90,24 @@ export default function IntakePage() {
   // TODO: replace with actual Supabase auth
   const currentUserId = "demo-user-123";
 
-  // FORM FIELDS
+  // CORE FIELDS
   const [itemNumber, setItemNumber] = useState("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
-  const [description, setDescription] = useState(""); // sales-forward
   const [category, setCategory] = useState("");
-  const [condition, setCondition] = useState("A");
+  const [color, setColor] = useState("");
+  const [material, setMaterial] = useState("");
+
+  const [condition, setCondition] = useState(""); // user must choose before AI
+  const [gradingNotes, setGradingNotes] = useState("");
+
   const [cost, setCost] = useState("");
   const [listingPrice, setListingPrice] = useState("");
 
-  // Dimensions
-  const [dimensions, setDimensions] = useState({
-    length: "",
-    height: "",
-    depth: "",
-    strap_drop: "",
-  });
+  // Narrative (merged sales-forward + analysis)
+  const [curatorNarrative, setCuratorNarrative] = useState("");
 
-  // Included items (from AI, editable list of strings)
+  // Included items
   const [includedItems, setIncludedItems] = useState([]);
 
   // Pricing preview from AI
@@ -121,16 +120,20 @@ export default function IntakePage() {
     sources: [],
   });
 
+  // AI structured data
+  const [aiData, setAiData] = useState(null);
+  const [aiQuickFacts, setAiQuickFacts] = useState(emptyQuickFacts);
+
+  // We still keep dimensions in state but do not show inputs
+  const [dimensions, setDimensions] = useState({
+    length: "",
+    height: "",
+    depth: "",
+    strap_drop: "",
+  });
+
   // Listing controls
   const [listForSale, setListForSale] = useState(false);
-
-  // AI output (full structured)
-  const [aiData, setAiData] = useState(null);
-
-  // NEW: AI Quick Facts (editable panel)
-  const [aiQuickFacts, setAiQuickFacts] = useState(emptyQuickFacts);
-  const [aiAnalysis, setAiAnalysis] = useState("");
-  const [showFullAnalysis, setShowFullAnalysis] = useState(false);
 
   // Photo grid (12 slots)
   const [images, setImages] = useState(Array(12).fill(null));
@@ -141,7 +144,7 @@ export default function IntakePage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Inventory summary (bottom section)
+  // Inventory summary
   const [userInventory, setUserInventory] = useState([]);
   const [globalInventory, setGlobalInventory] = useState([]);
 
@@ -224,7 +227,14 @@ export default function IntakePage() {
     const aiImages = images.filter((x) => x && x.url).map((x) => x.url);
 
     if (aiImages.length === 0) {
-      alert("Upload at least one photo before running AI lookup.");
+      alert("Upload at least one photo before running Curator AI.");
+      return;
+    }
+
+    if (!condition) {
+      alert(
+        "Please grade the condition of the item before running Curator AI."
+      );
       return;
     }
 
@@ -236,7 +246,11 @@ export default function IntakePage() {
       const response = await fetch("/api/ai-intake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrls: aiImages }),
+        body: JSON.stringify({
+          imageUrls: aiImages,
+          conditionGrade: condition,
+          gradingNotes,
+        }),
       });
 
       if (!response.ok) {
@@ -254,25 +268,17 @@ export default function IntakePage() {
       const data = result.data;
       setAiData(data);
 
-      // ---------- Fill top-level fields ----------
-      if (data.identity) {
-        if (data.identity.brand) {
-          setBrand((prev) => prev || data.identity.brand);
-        }
-        if (data.identity.model) {
-          setModel((prev) => prev || data.identity.model);
-        }
-        if (data.identity.category_primary) {
-          setCategory((prev) => prev || data.identity.category_primary);
-        }
-      }
+      const identity = data.identity || {};
 
-      // ---------- Description ----------
-      if (data.description?.sales_forward) {
-        setDescription((prev) => prev || data.description.sales_forward);
-      }
+      // Fill identity-style fields from AI (user can override)
+      if (identity.brand) setBrand((prev) => prev || identity.brand);
+      if (identity.model) setModel((prev) => prev || identity.model);
+      if (identity.category_primary)
+        setCategory((prev) => prev || identity.category_primary);
+      if (identity.color) setColor((prev) => prev || identity.color);
+      if (identity.material) setMaterial((prev) => prev || identity.material);
 
-      // ---------- Dimensions ----------
+      // Dimensions (not shown as inputs, used only for typical measurements)
       if (data.dimensions) {
         setDimensions((prev) => ({
           length: data.dimensions.length || prev.length,
@@ -282,12 +288,12 @@ export default function IntakePage() {
         }));
       }
 
-      // ---------- Included Items ----------
+      // Included items
       if (Array.isArray(data.included_items)) {
         setIncludedItems(data.included_items);
       }
 
-      // ---------- Pricing Preview ----------
+      // Pricing preview
       if (data.pricing) {
         setPricingPreview({
           retail_price: data.pricing.retail_price || null,
@@ -299,16 +305,16 @@ export default function IntakePage() {
         });
       }
 
-      // ---------- Quick Facts Panel ----------
+      // Quick Facts panel
       const mappedFacts = mapResultToQuickFacts(data);
       setAiQuickFacts((prev) => ({
         ...prev,
         ...mappedFacts,
       }));
 
-      // ---------- Full Analysis Text ----------
-      const analysisText = buildAnalysisText(data);
-      setAiAnalysis(analysisText);
+      // Curator Narrative (merged description + analysis)
+      const narrative = buildCuratorNarrative(data);
+      setCuratorNarrative((prev) => (prev ? prev : narrative));
     } catch (err) {
       console.error(err);
       alert("AI lookup failed.");
@@ -323,49 +329,63 @@ export default function IntakePage() {
     setErrorMsg("");
     setSuccessMsg("");
 
+    if (!condition) {
+      setErrorMsg("Please grade the condition of the item.");
+      setIsSaving(false);
+      return;
+    }
+
     const imagesPayload = images.filter((img) => img !== null);
 
-    // Build final structured fields
-    const identity = aiData?.identity || {
-      brand: brand || null,
-      model: model || null,
-      category_primary: category || null,
-      style: "",
-      color: "",
-      material: "",
-      hardware: "",
-      pattern: "",
-      year_range: "",
-      category_secondary: [],
+    // identity object: prefer AI identity, but merge with user overrides
+    const aiIdentity = aiData?.identity || {};
+    const identity = {
+      ...aiIdentity,
+      brand: brand || aiIdentity.brand || null,
+      model: model || aiIdentity.model || null,
+      category_primary: category || aiIdentity.category_primary || null,
+      color: color || aiIdentity.color || null,
+      material: material || aiIdentity.material || null,
     };
 
     const pricing = aiData?.pricing || null;
-
     const seo = aiData?.seo
       ? { ...aiData.seo, user_override: false }
       : null;
+
+    // future-friendly keyword field (for "ladies fashion", "red wallet" search)
+    const search_keywords = buildSearchKeywords({
+      identity,
+      narrative: curatorNarrative,
+      includedItems,
+    });
 
     const payload = {
       user_id: currentUserId,
       sku: itemNumber || null,
       item_number: itemNumber || null,
-      brand: brand || null,
-      model: model || null,
-      description,
-      category: category || null,
+
+      brand: identity.brand,
+      model: identity.model,
+      category: identity.category_primary,
+      color: identity.color,
+      material: identity.material,
+
+      description: curatorNarrative || null,
       condition,
+      condition_notes: gradingNotes || null,
+
       cost: cost ? Number(cost) : null,
       listing_price: listingPrice ? Number(listingPrice) : null,
-      images: imagesPayload,
 
-      // structured fields from AI
+      images: imagesPayload,
       identity,
       dimensions,
       included_items: includedItems,
       pricing,
       seo,
+      search_keywords,
 
-      // listing/public flags
       status: listForSale ? "ready_to_sell" : "intake",
       is_public: listForSale,
     };
@@ -389,11 +409,14 @@ export default function IntakePage() {
     setItemNumber("");
     setBrand("");
     setModel("");
-    setDescription("");
     setCategory("");
-    setCondition("A");
+    setColor("");
+    setMaterial("");
+    setCondition("");
+    setGradingNotes("");
     setCost("");
     setListingPrice("");
+    setCuratorNarrative("");
     setDimensions({ length: "", height: "", depth: "", strap_drop: "" });
     setIncludedItems([]);
     setPricingPreview({
@@ -406,11 +429,9 @@ export default function IntakePage() {
     });
     setAiData(null);
     setAiQuickFacts(emptyQuickFacts);
-    setAiAnalysis("");
     setImages(Array(12).fill(null));
     setListForSale(false);
 
-    // refresh inventory summary
     await loadInventory();
 
     setIsSaving(false);
@@ -421,7 +442,7 @@ export default function IntakePage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#0f172a",
+        background: "#020617",
         color: "#e5e7eb",
         padding: "16px",
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
@@ -443,14 +464,14 @@ export default function IntakePage() {
             style={{
               fontSize: "18px",
               fontWeight: 700,
-              letterSpacing: "0.06em",
+              letterSpacing: "0.08em",
               textTransform: "uppercase",
             }}
           >
             EMZLoveLuxury — Intake + Curator AI v2.0
           </h1>
           <p style={{ fontSize: "12px", color: "#9ca3af", marginTop: "4px" }}>
-            Upload. Identify. Prepare for listing. AI assists — you decide.
+            Photos + your grade in, curated narrative and valuation out.
           </p>
           {errorMsg && (
             <p style={{ fontSize: "12px", color: "#fecaca", marginTop: "4px" }}>
@@ -466,30 +487,15 @@ export default function IntakePage() {
 
         <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
           <button
-            onClick={runAI}
-            disabled={isAnalyzing}
+            onClick={handleSave}
+            disabled={isSaving}
             style={{
               padding: "8px 14px",
               fontSize: "12px",
               borderRadius: "999px",
-              border: "1px solid #22c55e",
-              background: isAnalyzing ? "#14532d" : "transparent",
-              color: "#bbf7d0",
-              cursor: isAnalyzing ? "default" : "pointer",
-            }}
-          >
-            {isAnalyzing ? "AI Thinking…" : "Run Curator AI"}
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            style={{
-              padding: "8px 16px",
-              fontSize: "12px",
-              borderRadius: "999px",
-              border: "none",
-              background: "#22c55e",
-              color: "#022c22",
+              border: "1px solid #facc15",
+              background: "#facc15",
+              color: "#111827",
               fontWeight: 600,
               cursor: isSaving ? "default" : "pointer",
             }}
@@ -500,26 +506,42 @@ export default function IntakePage() {
               ? "Save & Mark Ready to Sell"
               : "Save to Inventory"}
           </button>
+          <label
+            style={{
+              fontSize: "11px",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              color: "#e5e7eb",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={listForSale}
+              onChange={(e) => setListForSale(e.target.checked)}
+            />
+            Ready to Sell
+          </label>
         </div>
       </div>
 
-      {/* MAIN 3-COLUMN GRID */}
+      {/* MAIN 2-COLUMN GRID */}
       <div
         style={{
           maxWidth: "1180px",
           margin: "0 auto",
           display: "grid",
-          gridTemplateColumns: "1.05fr 1.15fr 0.9fr",
+          gridTemplateColumns: "1.1fr 1.4fr",
           gap: "16px",
           alignItems: "flex-start",
         }}
       >
-        {/* LEFT COLUMN – Photos */}
+        {/* LEFT COLUMN – Photos + Condition + AI Button */}
         <section
           style={{
             background: "#020617",
             borderRadius: "16px",
-            border: "1px solid #1f2937",
+            border: "1px solid #1e293b",
             padding: "12px",
           }}
         >
@@ -528,23 +550,25 @@ export default function IntakePage() {
               fontSize: "12px",
               fontWeight: 600,
               textTransform: "uppercase",
-              letterSpacing: "0.12em",
+              letterSpacing: "0.14em",
               color: "#9ca3af",
               marginBottom: "8px",
             }}
           >
-            Photos & AI Input
+            Photos & Condition
           </h2>
           <p style={{ fontSize: "11px", color: "#6b7280", marginBottom: "8px" }}>
-            Tap a tile to upload or replace. Front, back, interior, logo, and
-            date code give the AI its best shot.
+            Load your best angles, then grade the item. Curator AI will use
+            both your grade and the photos for valuation.
           </p>
 
+          {/* Photo grid */}
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
               gap: "8px",
+              marginBottom: "10px",
             }}
           >
             {placeholderImages.map((src, idx) => {
@@ -558,13 +582,13 @@ export default function IntakePage() {
                     position: "relative",
                     height: "150px",
                     borderRadius: "12px",
-                    border: isFilled ? "1px solid #4ade80" : "1px solid #374151",
+                    border: isFilled ? "1px solid #2563eb" : "1px solid #374151",
                     backgroundImage: isFilled
                       ? `url(${img.url})`
                       : `url(${src})`,
                     backgroundSize: "cover",
                     backgroundPosition: "center",
-                    backgroundColor: "#111827",
+                    backgroundColor: "#020617",
                     cursor: "pointer",
                     overflow: "hidden",
                   }}
@@ -608,253 +632,63 @@ export default function IntakePage() {
               );
             })}
           </div>
-        </section>
 
-        {/* MIDDLE COLUMN – Intake Form */}
-        <section
-          style={{
-            background: "#020617",
-            borderRadius: "16px",
-            border: "1px solid #1f2937",
-            padding: "12px",
-          }}
-        >
-          <h2
-            style={{
-              fontSize: "12px",
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: "0.12em",
-              color: "#9ca3af",
-              marginBottom: "8px",
-            }}
-          >
-            Intake Details
-          </h2>
-
-          {/* SKU / Item number */}
-          <label style={labelStyle}>Item Number / SKU</label>
-          <input
-            type="text"
-            value={itemNumber}
-            onChange={(e) => setItemNumber(e.target.value)}
-            style={inputStyle}
-            placeholder="Internal reference (optional)"
-          />
-
-          {/* Brand & Model */}
-          <label style={labelStyle}>Brand</label>
-          <input
-            type="text"
-            value={brand}
-            onChange={(e) => setBrand(e.target.value)}
-            style={inputStyle}
-            placeholder="Louis Vuitton, Chanel, Gucci…"
-          />
-
-          <label style={labelStyle}>Model / Line</label>
-          <input
-            type="text"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            style={inputStyle}
-            placeholder="Favorite MM, Alma PM, Marmont, etc."
-          />
-
-          {/* Category & Condition */}
-          <label style={labelStyle}>Category</label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            style={inputStyle}
-          >
-            <option value="">Select</option>
-            <option value="bag">Bag</option>
-            <option value="wallet">Wallet / SLG</option>
-            <option value="accessory">Accessory</option>
-            <option value="other">Other</option>
-          </select>
-
-          <label style={labelStyle}>Condition Grade</label>
+          {/* Condition & notes */}
+          <label style={labelStyle}>Condition Grade (required)</label>
           <select
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
             style={inputStyle}
           >
-            <option value="N">New</option>
-            <option value="A">Unused</option>
-            <option value="B">Excellent Preloved</option>
-            <option value="C">Functional, Signs of Use</option>
-            <option value="D">Project (Not Public)</option>
-            <option value="U">Contemporary Brand</option>
+            <option value="">Select grade…</option>
+            <option value="N">N – New</option>
+            <option value="A">A – Pristine or Unused Condition</option>
+            <option value="B">
+              B – Excellent Preloved with Minor Callouts
+            </option>
+            <option value="C">C – Functional With Signs of Usage</option>
+            <option value="D">D – Project</option>
+            <option value="U">U – Contemporary Brand</option>
           </select>
-
-          {/* Cost & Listing Price */}
-          <label style={labelStyle}>Cost (Your Buy-In, USD)</label>
-          <input
-            type="number"
-            value={cost}
-            onChange={(e) => setCost(e.target.value)}
-            style={inputStyle}
-            placeholder="e.g. 350"
-          />
-
-          <label style={labelStyle}>Target Listing Price (USD)</label>
-          <input
-            type="number"
-            value={listingPrice}
-            onChange={(e) => setListingPrice(e.target.value)}
-            style={inputStyle}
-            placeholder="AI suggested price or your own"
-          />
-
-          {/* Dimensions */}
-          <h3
-            style={{
-              marginTop: "16px",
-              fontSize: "13px",
-              fontWeight: 600,
-              color: "#e5e7eb",
-            }}
-          >
-            Dimensions
-          </h3>
-
-          <label style={labelStyle}>Length</label>
-          <input
-            type="text"
-            value={dimensions.length}
-            onChange={(e) =>
-              setDimensions((prev) => ({ ...prev, length: e.target.value }))
-            }
-            style={inputStyle}
-            placeholder='e.g. 10.6"'
-          />
-
-          <label style={labelStyle}>Height</label>
-          <input
-            type="text"
-            value={dimensions.height}
-            onChange={(e) =>
-              setDimensions((prev) => ({ ...prev, height: e.target.value }))
-            }
-            style={inputStyle}
-            placeholder='e.g. 6.3"'
-          />
-
-          <label style={labelStyle}>Depth</label>
-          <input
-            type="text"
-            value={dimensions.depth}
-            onChange={(e) =>
-              setDimensions((prev) => ({ ...prev, depth: e.target.value }))
-            }
-            style={inputStyle}
-            placeholder='e.g. 1.8"'
-          />
-
-          <label style={labelStyle}>Strap Drop</label>
-          <input
-            type="text"
-            value={dimensions.strap_drop}
-            onChange={(e) =>
-              setDimensions((prev) => ({ ...prev, strap_drop: e.target.value }))
-            }
-            style={inputStyle}
-            placeholder='e.g. 21"'
-          />
-
-          {/* Included Items */}
-          <h3
-            style={{
-              marginTop: "16px",
-              fontSize: "13px",
-              fontWeight: 600,
-              color: "#e5e7eb",
-            }}
-          >
-            Included Items
-          </h3>
-          <p style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "4px" }}>
-            Example: dust bag, strap, box, authenticity card. One per line.
+          <p style={{ fontSize: "10px", color: "#facc15", marginTop: "-4px" }}>
+            Curator AI will not run until you choose a grade.
           </p>
+
+          <label style={labelStyle}>Grading Notes (user only)</label>
           <textarea
-            value={includedItems.join("\n")}
-            onChange={(e) => {
-              const lines = e.target.value
-                .split("\n")
-                .map((x) => x.trim())
-                .filter((x) => x.length > 0);
-              setIncludedItems(lines);
-            }}
-            style={{ ...inputStyle, minHeight: "80px" }}
-            placeholder={"Dust bag\nCrossbody strap\nBox"}
+            value={gradingNotes}
+            onChange={(e) => setGradingNotes(e.target.value)}
+            style={{ ...inputStyle, minHeight: "70px" }}
+            placeholder="Corner wear, hardware scratches, interior marks, odor notes, etc."
           />
 
-          {/* Description */}
-          <label style={labelStyle}>Sales-Forward Description</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            style={{ ...inputStyle, minHeight: "90px" }}
-            placeholder="AI sales-forward description here…"
-          />
-
-          {/* List for sale */}
-          <div style={{ marginTop: "8px" }}>
-            <label
-              style={{
-                fontSize: "12px",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={listForSale}
-                onChange={(e) => setListForSale(e.target.checked)}
-              />
-              Mark as ready to sell (public listing)
-            </label>
-          </div>
-
-          {/* AI Pricing Preview */}
-          <div
+          {/* Run AI button */}
+          <button
+            onClick={runAI}
+            disabled={isAnalyzing}
             style={{
-              marginTop: "12px",
-              padding: "10px",
-              borderRadius: "10px",
-              border: "1px solid #1e293b",
-              background: "#020617",
+              marginTop: "10px",
+              width: "100%",
+              padding: "8px 14px",
+              fontSize: "12px",
+              borderRadius: "999px",
+              border: "1px solid #2563eb",
+              background: isAnalyzing ? "#1e293b" : "#1d4ed8",
+              color: "#e5e7eb",
+              fontWeight: 600,
+              cursor: isAnalyzing ? "default" : "pointer",
+              boxShadow: "0 0 0 1px rgba(37,99,235,0.4)",
             }}
           >
-            <strong style={{ fontSize: "12px" }}>AI Pricing Preview:</strong>
-            {pricingPreview.retail_price && (
-              <p style={previewStyle}>
-                Retail: {pricingPreview.retail_price}
-              </p>
-            )}
-            {pricingPreview.comp_low && (
-              <p style={previewStyle}>Comp Low: {pricingPreview.comp_low}</p>
-            )}
-            {pricingPreview.comp_high && (
-              <p style={previewStyle}>Comp High: {pricingPreview.comp_high}</p>
-            )}
-            {pricingPreview.recommended_listing && (
-              <p style={previewStyle}>
-                Recommended Listing: {pricingPreview.recommended_listing}
-              </p>
-            )}
-            {pricingPreview.whatnot_start && (
-              <p style={previewStyle}>
-                Suggested Whatnot Start: {pricingPreview.whatnot_start}
-              </p>
-            )}
-          </div>
+            {isAnalyzing ? "Curator AI Thinking…" : "Run Curator AI"}
+          </button>
+          <p style={{ fontSize: "10px", color: "#9ca3af", marginTop: "6px" }}>
+            Uses photos + your grade to propose identity, narrative, and
+            valuation. You can edit everything before saving.
+          </p>
         </section>
 
-        {/* RIGHT COLUMN – AI Quick Facts + Analysis */}
+        {/* RIGHT COLUMN – Curator Panel */}
         <section
           style={{
             display: "flex",
@@ -862,12 +696,225 @@ export default function IntakePage() {
             gap: "12px",
           }}
         >
-          {/* Quick Facts Panel */}
+          {/* Curator Narrative Hero */}
           <div
             style={{
-              background: "#022c22",
+              background:
+                "linear-gradient(135deg, rgba(30,64,175,0.35), rgba(15,23,42,1))",
               borderRadius: "16px",
-              border: "1px solid #22c55e",
+              border: "1px solid #facc15",
+              padding: "12px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "4px",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.16em",
+                  color: "#facc15",
+                }}
+              >
+                Curator Narrative
+              </h2>
+              <span
+                style={{
+                  fontSize: "10px",
+                  borderRadius: "999px",
+                  padding: "2px 8px",
+                  border: "1px solid rgba(250,204,21,0.7)",
+                  color: "#facc15",
+                  background: "rgba(15,23,42,0.7)",
+                }}
+              >
+                AI Draft · You Finalize
+              </span>
+            </div>
+            <textarea
+              value={curatorNarrative}
+              onChange={(e) => setCuratorNarrative(e.target.value)}
+              rows={8}
+              style={{
+                ...inputStyle,
+                minHeight: "140px",
+                fontSize: "11px",
+                lineHeight: 1.45,
+                background: "rgba(15,23,42,0.9)",
+                borderColor: "#1e293b",
+              }}
+              placeholder="When you run Curator AI, a sales-forward description with model notes will appear here. You can edit this before listing or going live."
+            />
+          </div>
+
+          {/* Identity Card */}
+          <div
+            style={{
+              background: "#020617",
+              borderRadius: "16px",
+              border: "1px solid #1f2937",
+              padding: "12px",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "12px",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.14em",
+                color: "#9ca3af",
+                marginBottom: "8px",
+              }}
+            >
+              Identity & Indexing
+            </h2>
+
+            <label style={labelStyle}>Item Number / SKU</label>
+            <input
+              type="text"
+              value={itemNumber}
+              onChange={(e) => setItemNumber(e.target.value)}
+              style={inputStyle}
+              placeholder="Internal reference (optional)"
+            />
+
+            <label style={labelStyle}>Brand</label>
+            <input
+              type="text"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              style={inputStyle}
+              placeholder="Louis Vuitton, Chanel, Gucci…"
+            />
+
+            <label style={labelStyle}>Model / Line</label>
+            <input
+              type="text"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              style={inputStyle}
+              placeholder="Favorite MM, Alma PM, Marmont, etc."
+            />
+
+            <label style={labelStyle}>Category (free text)</label>
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              style={inputStyle}
+              placeholder="women's wallet, mini shoulder bag, crossbody, etc."
+            />
+
+            <label style={labelStyle}>Color</label>
+            <input
+              type="text"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              style={inputStyle}
+              placeholder="Red, Noir, Monogram, etc."
+            />
+
+            <label style={labelStyle}>Material</label>
+            <input
+              type="text"
+              value={material}
+              onChange={(e) => setMaterial(e.target.value)}
+              style={inputStyle}
+              placeholder="Monogram canvas, calfskin leather, etc."
+            />
+          </div>
+
+          {/* Pricing & Status Card */}
+          <div
+            style={{
+              background: "#020617",
+              borderRadius: "16px",
+              border: "1px solid #1f2937",
+              padding: "12px",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "12px",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.14em",
+                color: "#9ca3af",
+                marginBottom: "8px",
+              }}
+            >
+              Pricing & Status
+            </h2>
+
+            <label style={labelStyle}>Cost (Your Buy-In, USD)</label>
+            <input
+              type="number"
+              value={cost}
+              onChange={(e) => setCost(e.target.value)}
+              style={inputStyle}
+              placeholder="e.g. 350"
+            />
+
+            <label style={labelStyle}>Target Listing Price (USD)</label>
+            <input
+              type="number"
+              value={listingPrice}
+              onChange={(e) => setListingPrice(e.target.value)}
+              style={inputStyle}
+              placeholder="AI suggested price or your own"
+            />
+
+            <div
+              style={{
+                marginTop: "10px",
+                padding: "10px",
+                borderRadius: "10px",
+                border: "1px solid #1e293b",
+                background: "#020617",
+              }}
+            >
+              <strong style={{ fontSize: "12px" }}>AI Pricing Preview</strong>
+              {pricingPreview.retail_price && (
+                <p style={previewStyle}>
+                  Retail: {pricingPreview.retail_price}
+                </p>
+              )}
+              {pricingPreview.comp_low && (
+                <p style={previewStyle}>
+                  Comp Low: {pricingPreview.comp_low}
+                </p>
+              )}
+              {pricingPreview.comp_high && (
+                <p style={previewStyle}>
+                  Comp High: {pricingPreview.comp_high}
+                </p>
+              )}
+              {pricingPreview.recommended_listing && (
+                <p style={previewStyle}>
+                  Recommended Listing: {pricingPreview.recommended_listing}
+                </p>
+              )}
+              {pricingPreview.whatnot_start && (
+                <p style={previewStyle}>
+                  Suggested Whatnot Start: {pricingPreview.whatnot_start}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Facts Card */}
+          <div
+            style={{
+              background: "#020617",
+              borderRadius: "16px",
+              border: "1px solid #2563eb",
               padding: "12px",
             }}
           >
@@ -885,7 +932,7 @@ export default function IntakePage() {
                   fontWeight: 600,
                   textTransform: "uppercase",
                   letterSpacing: "0.14em",
-                  color: "#bbf7d0",
+                  color: "#bfdbfe",
                 }}
               >
                 AI Quick Facts
@@ -895,8 +942,9 @@ export default function IntakePage() {
                   fontSize: "10px",
                   borderRadius: "999px",
                   padding: "2px 8px",
-                  border: "1px solid #22c55e",
-                  color: "#bbf7d0",
+                  border: "1px solid rgba(37,99,235,0.7)",
+                  color: "#bfdbfe",
+                  background: "rgba(15,23,42,0.7)",
                 }}
               >
                 Editable
@@ -915,34 +963,6 @@ export default function IntakePage() {
               }
               style={inputStyle}
               placeholder="Favorite MM, Alma PM, etc."
-            />
-
-            <label style={labelStyle}>Brand</label>
-            <input
-              type="text"
-              value={aiQuickFacts.brand}
-              onChange={(e) =>
-                setAiQuickFacts((prev) => ({
-                  ...prev,
-                  brand: e.target.value,
-                }))
-              }
-              style={inputStyle}
-              placeholder="Louis Vuitton, Chanel…"
-            />
-
-            <label style={labelStyle}>Category</label>
-            <input
-              type="text"
-              value={aiQuickFacts.category}
-              onChange={(e) =>
-                setAiQuickFacts((prev) => ({
-                  ...prev,
-                  category: e.target.value,
-                }))
-              }
-              style={inputStyle}
-              placeholder="Shoulder bag, crossbody, wallet…"
             />
 
             <label style={labelStyle}>Production Years</label>
@@ -1012,7 +1032,7 @@ export default function IntakePage() {
                 }))
               }
               style={inputStyle}
-              placeholder='e.g. 10.6" x 6.3" x 1.8"'
+              placeholder='e.g. L: 10.6" · H: 6.3" · D: 1.8"'
             />
 
             <label style={labelStyle}>Availability / Market Note</label>
@@ -1083,55 +1103,49 @@ export default function IntakePage() {
             />
           </div>
 
-          {/* Full AI Model Analysis */}
+          {/* Included Items */}
           <div
             style={{
               background: "#020617",
               borderRadius: "16px",
               border: "1px solid #1f2937",
-              padding: "10px",
+              padding: "12px",
             }}
           >
-            <button
-              type="button"
-              onClick={() => setShowFullAnalysis((s) => !s)}
+            <h2
               style={{
-                width: "100%",
-                border: "none",
-                background: "transparent",
-                color: "#e5e7eb",
-                fontSize: "11px",
+                fontSize: "12px",
                 fontWeight: 600,
                 textTransform: "uppercase",
                 letterSpacing: "0.14em",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                cursor: "pointer",
+                color: "#9ca3af",
+                marginBottom: "8px",
               }}
             >
-              <span>AI Full Model Analysis</span>
-              <span style={{ color: "#6b7280" }}>
-                {showFullAnalysis ? "−" : "+"}
-              </span>
-            </button>
-            {showFullAnalysis && (
-              <div style={{ marginTop: "8px" }}>
-                <textarea
-                  value={aiAnalysis}
-                  onChange={(e) => setAiAnalysis(e.target.value)}
-                  rows={10}
-                  style={{
-                    ...inputStyle,
-                    minHeight: "140px",
-                    fontSize: "11px",
-                    lineHeight: 1.4,
-                    background: "#020617",
-                  }}
-                  placeholder="Curator-style narrative, model notes, history, styling notes…"
-                />
-              </div>
-            )}
+              Included Items
+            </h2>
+            <p
+              style={{
+                fontSize: "11px",
+                color: "#9ca3af",
+                marginBottom: "4px",
+              }}
+            >
+              One per line: dust bag, strap, box, authenticity card, inserts,
+              etc.
+            </p>
+            <textarea
+              value={includedItems.join("\n")}
+              onChange={(e) => {
+                const lines = e.target.value
+                  .split("\n")
+                  .map((x) => x.trim())
+                  .filter((x) => x.length > 0);
+                setIncludedItems(lines);
+              }}
+              style={{ ...inputStyle, minHeight: "80px" }}
+              placeholder={"Dust bag\nCrossbody strap\nBox"}
+            />
           </div>
         </section>
       </div>
@@ -1271,7 +1285,6 @@ function mapResultToQuickFacts(aiResult) {
   if (dims.length) measurementsParts.push(`L: ${dims.length}`);
   if (dims.height) measurementsParts.push(`H: ${dims.height}`);
   if (dims.depth) measurementsParts.push(`D: ${dims.depth}`);
-  if (dims.strap_drop) measurementsParts.push(`Strap: ${dims.strap_drop}`);
 
   return {
     modelName: identity.model || "",
@@ -1296,7 +1309,7 @@ function mapResultToQuickFacts(aiResult) {
   };
 }
 
-function buildAnalysisText(aiResult) {
+function buildCuratorNarrative(aiResult) {
   if (!aiResult) return "";
 
   const identity = aiResult.identity || {};
@@ -1339,6 +1352,30 @@ function buildAnalysisText(aiResult) {
   }
 
   return lines.join("\n");
+}
+
+function buildSearchKeywords({ identity, narrative, includedItems }) {
+  const keywords = new Set();
+
+  if (identity.brand) keywords.add(identity.brand);
+  if (identity.model) keywords.add(identity.model);
+  if (identity.category_primary) keywords.add(identity.category_primary);
+  if (identity.color) keywords.add(identity.color);
+  if (identity.material) keywords.add(identity.material);
+
+  (includedItems || []).forEach((itm) => {
+    if (itm) keywords.add(itm);
+  });
+
+  if (narrative) {
+    narrative
+      .split(/[\s,./]+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length > 2)
+      .forEach((w) => keywords.add(w.toLowerCase()));
+  }
+
+  return Array.from(keywords);
 }
 
 // ---------- STYLE HELPERS ----------
