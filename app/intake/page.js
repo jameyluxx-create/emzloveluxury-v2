@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
 // ---------- helper: resize image on client before upload ----------
@@ -138,9 +138,31 @@ export default function IntakePage() {
   const [userInventory, setUserInventory] = useState([]);
   const [globalInventory, setGlobalInventory] = useState([]);
 
+  // Refs for auto-growing textareas
+  const narrativeRef = useRef(null);
+  const includedRef = useRef(null);
+
   useEffect(() => {
     loadInventory();
   }, []);
+
+  // Auto-grow the Curator Narrative (print card) textarea
+  useEffect(() => {
+    if (narrativeRef.current) {
+      const el = narrativeRef.current;
+      el.style.height = "auto";
+      el.style.height = el.scrollHeight + "px";
+    }
+  }, [curatorNarrative]);
+
+  // Auto-grow the Included Items textarea
+  useEffect(() => {
+    if (includedRef.current) {
+      const el = includedRef.current;
+      el.style.height = "auto";
+      el.style.height = el.scrollHeight + "px";
+    }
+  }, [includedItems]);
 
   async function loadInventory() {
     try {
@@ -795,17 +817,19 @@ export default function IntakePage() {
               </span>
             </div>
             <textarea
+              ref={narrativeRef}
               value={curatorNarrative}
               onChange={(e) => setCuratorNarrative(e.target.value)}
               rows={12}
               style={{
                 ...inputStyle,
-                minHeight: "220px",
                 fontSize: "11px",
                 lineHeight: 1.45,
                 background: "rgba(15,23,42,0.96)",
                 borderColor: "#1e293b",
                 color: "#e5e7eb",
+                resize: "none",
+                overflow: "hidden",
               }}
               placeholder={
                 "When you run Curator AI, a complete profile appears here: item number, identity, measurements, features, market note, value range, and sales-forward description — ready to print or read live."
@@ -914,6 +938,7 @@ export default function IntakePage() {
               etc.
             </p>
             <textarea
+              ref={includedRef}
               value={includedItems.join("\n")}
               onChange={(e) => {
                 const lines = e.target.value
@@ -922,7 +947,12 @@ export default function IntakePage() {
                   .filter((x) => x.length > 0);
                 setIncludedItems(lines);
               }}
-              style={{ ...inputStyle, minHeight: "80px" }}
+              style={{
+                ...inputStyle,
+                minHeight: "80px",
+                resize: "none",
+                overflow: "hidden",
+              }}
               placeholder={"Dust bag\nCrossbody strap\nBox"}
             />
           </div>
