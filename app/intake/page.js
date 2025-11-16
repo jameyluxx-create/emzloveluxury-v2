@@ -67,7 +67,7 @@ function generateItemNumber() {
   return `EMZ-${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
 }
 
-// ---------- PLACEHOLDER IMAGES ----------
+// ---------- PLACEHOLDER IMAGES (6 slots now) ----------
 const placeholderImages = [
   "/placeholders/Emzthumb-+AddMain.png",
   "/placeholders/Emzthumb-+AddFront.png",
@@ -75,12 +75,6 @@ const placeholderImages = [
   "/placeholders/Emzthumb-+AddInside.png",
   "/placeholders/Emzthumb-+AddLabel.png",
   "/placeholders/Emzthumb-+AddAuthTags.png",
-  "/placeholders/Emzthumb-+AddDetails.png",
-  "/placeholders/Emzthumb-+AddDetails.png",
-  "/placeholders/Emzthumb-+AddDetails.png",
-  "/placeholders/Emzthumb-+AddDetails.png",
-  "/placeholders/Emzthumb-+AddDetails.png",
-  "/placeholders/Emzthumb-+AddDetails.png",
 ];
 
 export default function IntakePage() {
@@ -120,7 +114,7 @@ export default function IntakePage() {
   // AI structured data
   const [aiData, setAiData] = useState(null);
 
-  // We keep dimensions from AI to build typical measurements line
+  // Dimensions from AI to build typical measurements line
   const [dimensions, setDimensions] = useState({
     length: "",
     height: "",
@@ -131,8 +125,8 @@ export default function IntakePage() {
   // Listing controls
   const [listForSale, setListForSale] = useState(false);
 
-  // Photo grid (12 slots)
-  const [images, setImages] = useState(Array(12).fill(null));
+  // Photo grid (6 slots)
+  const [images, setImages] = useState(Array(6).fill(null));
 
   // Flags
   const [isSaving, setIsSaving] = useState(false);
@@ -177,6 +171,12 @@ export default function IntakePage() {
     input.onchange = async (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
+
+      // Generate item number as soon as first photo is added
+      if (!itemNumber) {
+        const generated = generateItemNumber();
+        setItemNumber(generated);
+      }
 
       try {
         const resizedBlob = await resizeImage(file, 1200, 0.8);
@@ -234,7 +234,7 @@ export default function IntakePage() {
       return;
     }
 
-    // Ensure item number exists before AI so narrative + payload can use it
+    // Safety: if somehow no item number yet, generate it now
     let currentItemNumber = itemNumber;
     if (!currentItemNumber) {
       currentItemNumber = generateItemNumber();
@@ -273,7 +273,7 @@ export default function IntakePage() {
 
       const identity = data.identity || {};
 
-      // Fill identity-style fields from AI (user can override, even if not shown)
+      // Fill identity-style fields from AI (only used internally, not shown)
       if (identity.brand) setBrand((prev) => prev || identity.brand);
       if (identity.model) setModel((prev) => prev || identity.model);
       if (identity.category_primary)
@@ -344,7 +344,7 @@ export default function IntakePage() {
       return;
     }
 
-    // Ensure item number exists before save
+    // Safety: ensure item number exists before save
     let currentItemNumber = itemNumber;
     if (!currentItemNumber) {
       currentItemNumber = generateItemNumber();
@@ -421,7 +421,7 @@ export default function IntakePage() {
         : "Item saved to inventory."
     );
 
-    // Reset form (new item = new auto itemNumber generated later)
+    // Reset form (next item = fresh intake, new itemNumber on first photo)
     setItemNumber("");
     setBrand("");
     setModel("");
@@ -444,7 +444,7 @@ export default function IntakePage() {
       sources: [],
     });
     setAiData(null);
-    setImages(Array(12).fill(null));
+    setImages(Array(6).fill(null));
     setListForSale(false);
 
     await loadInventory();
@@ -463,110 +463,36 @@ export default function IntakePage() {
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      {/* HEADER */}
+      {/* SIMPLE HEADER (title only) */}
       <div
         style={{
           maxWidth: "1180px",
           margin: "0 auto 16px auto",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "12px",
         }}
       >
-        <div>
-          <h1
-            style={{
-              fontSize: "18px",
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-            }}
-          >
-            EMZLoveLuxury — Intake + Curator AI v2.0
-          </h1>
-          <p style={{ fontSize: "12px", color: "#9ca3af", marginTop: "4px" }}>
-            Photos + your grade in, a neon-blue curator profile out.
-          </p>
-          {errorMsg && (
-            <p style={{ fontSize: "12px", color: "#fecaca", marginTop: "4px" }}>
-              {errorMsg}
-            </p>
-          )}
-          {successMsg && (
-            <p style={{ fontSize: "12px", color: "#bbf7d0", marginTop: "4px" }}>
-              {successMsg}
-            </p>
-          )}
-        </div>
-
-        <div
+        <h1
           style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "6px",
-            alignItems: "flex-end",
-            flexShrink: 0,
+            fontSize: "18px",
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: "11px", color: "#9ca3af" }}>Item #</span>
-            <input
-              type="text"
-              value={itemNumber}
-              onChange={(e) => setItemNumber(e.target.value)}
-              placeholder="Auto-generated"
-              style={{
-                padding: "4px 8px",
-                fontSize: "11px",
-                borderRadius: "999px",
-                border: "1px solid #1f2937",
-                background: "#020617",
-                color: "#e5e7eb",
-                minWidth: "170px",
-                textAlign: "center",
-              }}
-            />
-          </div>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              style={{
-                padding: "8px 14px",
-                fontSize: "12px",
-                borderRadius: "999px",
-                border: "1px solid #facc15",
-                background: "#facc15",
-                color: "#020617",
-                fontWeight: 600,
-                cursor: isSaving ? "default" : "pointer",
-              }}
-            >
-              {isSaving
-                ? "Saving…"
-                : listForSale
-                ? "Save & Mark Ready to Sell"
-                : "Save to Inventory"}
-            </button>
-            <label
-              style={{
-                fontSize: "11px",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                color: "#e5e7eb",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={listForSale}
-                onChange={(e) => setListForSale(e.target.checked)}
-              />
-              Ready to Sell
-            </label>
-          </div>
-        </div>
+          EMZLoveLuxury — Intake + Curator AI v2.0
+        </h1>
+        <p style={{ fontSize: "12px", color: "#9ca3af", marginTop: "4px" }}>
+          Photos + your inputs on the left, neon print card on the right.
+        </p>
+        {errorMsg && (
+          <p style={{ fontSize: "12px", color: "#fecaca", marginTop: "4px" }}>
+            {errorMsg}
+          </p>
+        )}
+        {successMsg && (
+          <p style={{ fontSize: "12px", color: "#bbf7d0", marginTop: "4px" }}>
+            {successMsg}
+          </p>
+        )}
       </div>
 
       {/* MAIN 2-COLUMN GRID */}
@@ -606,7 +532,7 @@ export default function IntakePage() {
             will use your grade and buy-in with the photos for valuation.
           </p>
 
-          {/* Photo grid */}
+          {/* Photo grid (6 slots) */}
           <div
             style={{
               display: "grid",
@@ -624,7 +550,7 @@ export default function IntakePage() {
                   onClick={() => handleReplaceImage(idx)}
                   style={{
                     position: "relative",
-                    height: "150px",
+                    height: idx === 0 ? "170px" : "140px", // slightly larger main slot
                     borderRadius: "12px",
                     border: isFilled
                       ? "1px solid #38bdf8"
@@ -746,7 +672,7 @@ export default function IntakePage() {
           </p>
         </section>
 
-        {/* RIGHT COLUMN – Curator Panel */}
+        {/* RIGHT COLUMN – Item # + Print Card + Pricing + Included Items */}
         <section
           style={{
             display: "flex",
@@ -754,7 +680,77 @@ export default function IntakePage() {
             gap: "12px",
           }}
         >
-          {/* Curator Narrative Hero */}
+          {/* Item number + Save + Ready to Sell */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                Item #
+              </span>
+              <input
+                type="text"
+                value={itemNumber}
+                onChange={(e) => setItemNumber(e.target.value)}
+                placeholder="Auto-generated on first photo"
+                style={{
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  borderRadius: "999px",
+                  border: "1px solid #1f2937",
+                  background: "#020617",
+                  color: "#e5e7eb",
+                  minWidth: "190px",
+                  textAlign: "center",
+                }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                style={{
+                  padding: "8px 14px",
+                  fontSize: "12px",
+                  borderRadius: "999px",
+                  border: "1px solid #facc15",
+                  background: "#facc15",
+                  color: "#020617",
+                  fontWeight: 600,
+                  cursor: isSaving ? "default" : "pointer",
+                }}
+              >
+                {isSaving
+                  ? "Saving…"
+                  : listForSale
+                  ? "Save & Mark Ready to Sell"
+                  : "Save to Inventory"}
+              </button>
+              <label
+                style={{
+                  fontSize: "11px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  color: "#e5e7eb",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={listForSale}
+                  onChange={(e) => setListForSale(e.target.checked)}
+                />
+                Ready to Sell
+              </label>
+            </div>
+          </div>
+
+          {/* Curator Narrative Hero (Print Card) */}
           <div
             style={{
               background:
