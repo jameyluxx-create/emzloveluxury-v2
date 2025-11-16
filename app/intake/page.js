@@ -54,6 +54,19 @@ async function resizeImage(file, maxSize = 1200, quality = 0.8) {
   });
 }
 
+// ---------- helper: generate unique item number ----------
+function generateItemNumber() {
+  const now = new Date();
+  const pad = (n) => n.toString().padStart(2, "0");
+  const yyyy = now.getFullYear();
+  const mm = pad(now.getMonth() + 1);
+  const dd = pad(now.getDate());
+  const hh = pad(now.getHours());
+  const mi = pad(now.getMinutes());
+  const ss = pad(now.getSeconds());
+  return `EMZ-${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+}
+
 // ---------- PLACEHOLDER IMAGES ----------
 const placeholderImages = [
   "/placeholders/Emzthumb-+AddMain.png",
@@ -221,6 +234,13 @@ export default function IntakePage() {
       return;
     }
 
+    // Ensure item number exists before AI so narrative + payload can use it
+    let currentItemNumber = itemNumber;
+    if (!currentItemNumber) {
+      currentItemNumber = generateItemNumber();
+      setItemNumber(currentItemNumber);
+    }
+
     setIsAnalyzing(true);
     setErrorMsg("");
     setSuccessMsg("");
@@ -253,7 +273,7 @@ export default function IntakePage() {
 
       const identity = data.identity || {};
 
-      // Fill identity-style fields from AI (user can override)
+      // Fill identity-style fields from AI (user can override, even if not shown)
       if (identity.brand) setBrand((prev) => prev || identity.brand);
       if (identity.model) setModel((prev) => prev || identity.model);
       if (identity.category_primary)
@@ -288,10 +308,11 @@ export default function IntakePage() {
         });
       }
 
-      // Build unified Curator Narrative that includes all AI facts
+      // Build unified Curator Narrative that includes all AI facts + item number
       const narrative = buildCuratorNarrative({
         aiResult: data,
         override: {
+          itemNumber: currentItemNumber,
           brand,
           model,
           category,
@@ -323,9 +344,16 @@ export default function IntakePage() {
       return;
     }
 
+    // Ensure item number exists before save
+    let currentItemNumber = itemNumber;
+    if (!currentItemNumber) {
+      currentItemNumber = generateItemNumber();
+      setItemNumber(currentItemNumber);
+    }
+
     const imagesPayload = images.filter((img) => img !== null);
 
-    // identity object: prefer AI identity, but merge with user overrides
+    // identity object: prefer AI identity, but merge with hidden overrides
     const aiIdentity = aiData?.identity || {};
     const identity = {
       ...aiIdentity,
@@ -350,8 +378,8 @@ export default function IntakePage() {
 
     const payload = {
       user_id: currentUserId,
-      sku: itemNumber || null,
-      item_number: itemNumber || null,
+      sku: currentItemNumber,
+      item_number: currentItemNumber,
 
       brand: identity.brand,
       model: identity.model,
@@ -393,7 +421,7 @@ export default function IntakePage() {
         : "Item saved to inventory."
     );
 
-    // Reset form
+    // Reset form (new item = new auto itemNumber generated later)
     setItemNumber("");
     setBrand("");
     setModel("");
@@ -472,43 +500,72 @@ export default function IntakePage() {
           )}
         </div>
 
-        <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            style={{
-              padding: "8px 14px",
-              fontSize: "12px",
-              borderRadius: "999px",
-              border: "1px solid #facc15",
-              background: "#facc15",
-              color: "#020617",
-              fontWeight: 600,
-              cursor: isSaving ? "default" : "pointer",
-            }}
-          >
-            {isSaving
-              ? "Saving…"
-              : listForSale
-              ? "Save & Mark Ready to Sell"
-              : "Save to Inventory"}
-          </button>
-          <label
-            style={{
-              fontSize: "11px",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              color: "#e5e7eb",
-            }}
-          >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px",
+            alignItems: "flex-end",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: "11px", color: "#9ca3af" }}>Item #</span>
             <input
-              type="checkbox"
-              checked={listForSale}
-              onChange={(e) => setListForSale(e.target.checked)}
+              type="text"
+              value={itemNumber}
+              onChange={(e) => setItemNumber(e.target.value)}
+              placeholder="Auto-generated"
+              style={{
+                padding: "4px 8px",
+                fontSize: "11px",
+                borderRadius: "999px",
+                border: "1px solid #1f2937",
+                background: "#020617",
+                color: "#e5e7eb",
+                minWidth: "170px",
+                textAlign: "center",
+              }}
             />
-            Ready to Sell
-          </label>
+          </div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              style={{
+                padding: "8px 14px",
+                fontSize: "12px",
+                borderRadius: "999px",
+                border: "1px solid #facc15",
+                background: "#facc15",
+                color: "#020617",
+                fontWeight: 600,
+                cursor: isSaving ? "default" : "pointer",
+              }}
+            >
+              {isSaving
+                ? "Saving…"
+                : listForSale
+                ? "Save & Mark Ready to Sell"
+                : "Save to Inventory"}
+            </button>
+            <label
+              style={{
+                fontSize: "11px",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                color: "#e5e7eb",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={listForSale}
+                onChange={(e) => setListForSale(e.target.checked)}
+              />
+              Ready to Sell
+            </label>
+          </div>
         </div>
       </div>
 
@@ -523,7 +580,7 @@ export default function IntakePage() {
           alignItems: "flex-start",
         }}
       >
-        {/* LEFT COLUMN – Photos + Condition + AI Button */}
+        {/* LEFT COLUMN – Photos + Cost + Condition + AI Button */}
         <section
           style={{
             background: "#020617",
@@ -545,8 +602,8 @@ export default function IntakePage() {
             Photos & Condition
           </h2>
           <p style={{ fontSize: "11px", color: "#6b7280", marginBottom: "8px" }}>
-            Load your best angles, then grade the item. Curator AI will use your
-            grade and the photos for valuation.
+            Load your best angles, set your cost and grade the item. Curator AI
+            will use your grade and buy-in with the photos for valuation.
           </p>
 
           {/* Photo grid */}
@@ -622,6 +679,16 @@ export default function IntakePage() {
             })}
           </div>
 
+          {/* Cost */}
+          <label style={labelStyle}>Cost (Your Buy-In, USD)</label>
+          <input
+            type="number"
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+            style={inputStyle}
+            placeholder="e.g. 350"
+          />
+
           {/* Condition & notes */}
           <label style={labelStyle}>Condition Grade (required)</label>
           <select
@@ -674,8 +741,8 @@ export default function IntakePage() {
             {isAnalyzing ? "Curator AI Thinking…" : "Run Curator AI"}
           </button>
           <p style={{ fontSize: "10px", color: "#9ca3af", marginTop: "6px" }}>
-            Uses photos + your grade to build a complete curator profile you
-            can edit and print.
+            Uses photos + your cost and grade to build a complete curator
+            profile you can edit and print.
           </p>
         </section>
 
@@ -745,89 +812,12 @@ export default function IntakePage() {
                 color: "#e5e7eb",
               }}
               placeholder={
-                "When you run Curator AI, a complete profile appears here: identity, measurements, features, market note, value range, and sales-forward description — ready to print or read live."
+                "When you run Curator AI, a complete profile appears here: item number, identity, measurements, features, market note, value range, and sales-forward description — ready to print or read live."
               }
             />
           </div>
 
-          {/* Identity Card */}
-          <div
-            style={{
-              background: "#020617",
-              borderRadius: "16px",
-              border: "1px solid #1f2937",
-              padding: "12px",
-            }}
-          >
-            <h2
-              style={{
-                fontSize: "12px",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.14em",
-                color: "#9ca3af",
-                marginBottom: "8px",
-              }}
-            >
-              Identity & Indexing
-            </h2>
-
-            <label style={labelStyle}>Item Number / SKU</label>
-            <input
-              type="text"
-              value={itemNumber}
-              onChange={(e) => setItemNumber(e.target.value)}
-              style={inputStyle}
-              placeholder="Internal reference (optional)"
-            />
-
-            <label style={labelStyle}>Brand</label>
-            <input
-              type="text"
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              style={inputStyle}
-              placeholder="Louis Vuitton, Chanel, Gucci…"
-            />
-
-            <label style={labelStyle}>Model / Line</label>
-            <input
-              type="text"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              style={inputStyle}
-              placeholder="Favorite MM, Alma PM, Marmont, etc."
-            />
-
-            <label style={labelStyle}>Category (free text)</label>
-            <input
-              type="text"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              style={inputStyle}
-              placeholder="women's wallet, mini shoulder bag, crossbody, etc."
-            />
-
-            <label style={labelStyle}>Color</label>
-            <input
-              type="text"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              style={inputStyle}
-              placeholder="Red, Noir, Monogram, etc."
-            />
-
-            <label style={labelStyle}>Material</label>
-            <input
-              type="text"
-              value={material}
-              onChange={(e) => setMaterial(e.target.value)}
-              style={inputStyle}
-              placeholder="Monogram canvas, calfskin leather, etc."
-            />
-          </div>
-
-          {/* Pricing & Status Card */}
+          {/* Pricing & Status Card (Listing Price + AI Preview) */}
           <div
             style={{
               background: "#020617",
@@ -848,15 +838,6 @@ export default function IntakePage() {
             >
               Pricing & Status
             </h2>
-
-            <label style={labelStyle}>Cost (Your Buy-In, USD)</label>
-            <input
-              type="number"
-              value={cost}
-              onChange={(e) => setCost(e.target.value)}
-              style={inputStyle}
-              placeholder="e.g. 350"
-            />
 
             <label style={labelStyle}>Target Listing Price (USD)</label>
             <input
@@ -1087,6 +1068,8 @@ function buildCuratorNarrative({ aiResult, override }) {
 
   const featureBullets = description.feature_bullets || [];
 
+  const itemNumber = override.itemNumber || "";
+
   const brand = override.brand || identity.brand || "";
   const model = override.model || identity.model || "";
   const category =
@@ -1103,15 +1086,18 @@ function buildCuratorNarrative({ aiResult, override }) {
   if (dims.height) measurementsParts.push(`H: ${dims.height}`);
   if (dims.depth) measurementsParts.push(`D: ${dims.depth}`);
   const measurementsLine =
-    measurementsParts.length > 0
-      ? measurementsParts.join(" · ")
-      : "";
+    measurementsParts.length > 0 ? measurementsParts.join(" · ") : "";
 
   const lines = [];
 
+  // Item number first for print card lookup
+  if (itemNumber) {
+    lines.push(`Item #: ${itemNumber}`);
+  }
+
   // Header / identity
   if (brand || model) {
-    lines.push(`Brand: ${[brand, model].filter(Boolean).join(" · ")}`);
+    lines.push(`Brand / Model: ${[brand, model].filter(Boolean).join(" · ")}`);
   }
   if (category) {
     lines.push(`Category: ${category}`);
