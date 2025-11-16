@@ -108,7 +108,7 @@ export default function IntakePage() {
   // EMZCurator Description (print card)
   const [curatorNarrative, setCuratorNarrative] = useState("");
 
-  // Included items (as free text; one per line)
+  // Included items as raw text (one per line)
   const [includedText, setIncludedText] = useState("");
 
   // Pricing preview from AI
@@ -156,7 +156,7 @@ export default function IntakePage() {
     loadInventory();
   }, []);
 
-  // Auto-grow the EMZCurator Description textarea
+  // Auto-grow EMZCurator Description textarea
   useEffect(() => {
     if (narrativeRef.current) {
       const el = narrativeRef.current;
@@ -165,7 +165,7 @@ export default function IntakePage() {
     }
   }, [curatorNarrative]);
 
-  // Auto-grow the Included Items textarea
+  // Auto-grow Included Items textarea
   useEffect(() => {
     if (includedRef.current) {
       const el = includedRef.current;
@@ -306,14 +306,12 @@ export default function IntakePage() {
     const aiImages = images.filter((x) => x && x.url).map((x) => x.url);
 
     if (aiImages.length === 0) {
-      alert("Upload at least one photo before running Curator AI.");
+      alert("Upload at least one photo before running EMZCurator AI.");
       return;
     }
 
     if (!condition) {
-      alert(
-        "Please grade the condition of the item before running Curator AI."
-      );
+      alert("Please grade the condition of the item before running EMZCurator AI.");
       return;
     }
 
@@ -347,7 +345,7 @@ export default function IntakePage() {
 
       if (!result.success || !result.data) {
         console.error("AI error:", result);
-        alert("AI lookup did not return expected data.");
+        alert("EMZCurator lookup did not return expected data.");
         return;
       }
 
@@ -409,7 +407,7 @@ export default function IntakePage() {
       setCuratorNarrative((prev) => (prev ? prev : narrative));
     } catch (err) {
       console.error(err);
-      alert("AI lookup failed.");
+      alert("EMZCurator AI lookup failed.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -458,7 +456,7 @@ export default function IntakePage() {
       .map((x) => x.trim())
       .filter((x) => x.length > 0);
 
-    // future-friendly keyword field (for "ladies fashion", "red wallet" search)
+    // future-friendly keyword field
     const search_keywords = buildSearchKeywords({
       identity,
       narrative: curatorNarrative,
@@ -496,7 +494,7 @@ export default function IntakePage() {
       is_public: listForSale,
     };
 
-    // NOTE: For global inventory in USD later, you can:
+    // NOTE: For global inventory conversion to USD later, you can:
     // - add cost_usd / listing_price_usd columns
     // - convert on server using FX rate at time of save
 
@@ -515,7 +513,7 @@ export default function IntakePage() {
         : "Item saved to inventory."
     );
 
-    // Reset form (next item = fresh intake, new itemNumber on first photo)
+    // Reset form
     setItemNumber("");
     setBrand("");
     setModel("");
@@ -586,7 +584,7 @@ export default function IntakePage() {
         </h1>
         <p style={{ fontSize: "12px", color: "#bfdbfe", marginTop: "4px" }}>
           Photos + your cost & grade on the left. EMZCurator Description and
-          print card on the right.
+          live print card on the right.
         </p>
         {errorMsg && (
           <p style={{ fontSize: "12px", color: "#fecaca", marginTop: "4px" }}>
@@ -656,7 +654,7 @@ export default function IntakePage() {
                   onClick={() => handleReplaceImage(idx)}
                   style={{
                     position: "relative",
-                    height: idx === 0 ? "170px" : "140px", // slightly larger main slot
+                    height: idx === 0 ? "170px" : "140px",
                     borderRadius: "12px",
                     border: isFilled
                       ? "1px solid #38bdf8"
@@ -737,7 +735,7 @@ export default function IntakePage() {
             value={cost}
             onChange={(e) => setCost(e.target.value)}
             style={inputStyle}
-            placeholder={`e.g. 350`}
+            placeholder="e.g. 350"
           />
 
           {/* Condition & notes */}
@@ -801,6 +799,7 @@ export default function IntakePage() {
         <section
           style={{
             display: "flex",
+            flexDirection: "flex-column",
             flexDirection: "column",
             gap: "12px",
           }}
@@ -987,7 +986,7 @@ export default function IntakePage() {
               value={listingPrice}
               onChange={(e) => setListingPrice(e.target.value)}
               style={inputStyle}
-              placeholder={`EMZCurator suggestion or your own`}
+              placeholder="EMZCurator suggestion or your own"
             />
 
             <div
