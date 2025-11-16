@@ -70,22 +70,6 @@ const placeholderImages = [
   "/placeholders/Emzthumb-+AddDetails.png",
 ];
 
-// ---------- QUICK FACTS SHAPE ----------
-const emptyQuickFacts = {
-  modelName: "",
-  brand: "",
-  category: "",
-  productionYears: "",
-  materials: "",
-  colors: "",
-  features: "",
-  measurements: "",
-  availabilityNote: "",
-  valueLow: "",
-  valueHigh: "",
-  conditionHint: "",
-};
-
 export default function IntakePage() {
   // TODO: replace with actual Supabase auth
   const currentUserId = "demo-user-123";
@@ -104,7 +88,7 @@ export default function IntakePage() {
   const [cost, setCost] = useState("");
   const [listingPrice, setListingPrice] = useState("");
 
-  // Narrative (merged sales-forward + analysis)
+  // Narrative (merged ALL facts + sales-forward + analysis)
   const [curatorNarrative, setCuratorNarrative] = useState("");
 
   // Included items
@@ -122,9 +106,8 @@ export default function IntakePage() {
 
   // AI structured data
   const [aiData, setAiData] = useState(null);
-  const [aiQuickFacts, setAiQuickFacts] = useState(emptyQuickFacts);
 
-  // We still keep dimensions in state but do not show inputs
+  // We keep dimensions from AI to build typical measurements line
   const [dimensions, setDimensions] = useState({
     length: "",
     height: "",
@@ -278,7 +261,7 @@ export default function IntakePage() {
       if (identity.color) setColor((prev) => prev || identity.color);
       if (identity.material) setMaterial((prev) => prev || identity.material);
 
-      // Dimensions (not shown as inputs, used only for typical measurements)
+      // Dimensions (used only for typical measurements line)
       if (data.dimensions) {
         setDimensions((prev) => ({
           length: data.dimensions.length || prev.length,
@@ -305,15 +288,20 @@ export default function IntakePage() {
         });
       }
 
-      // Quick Facts panel
-      const mappedFacts = mapResultToQuickFacts(data);
-      setAiQuickFacts((prev) => ({
-        ...prev,
-        ...mappedFacts,
-      }));
+      // Build unified Curator Narrative that includes all AI facts
+      const narrative = buildCuratorNarrative({
+        aiResult: data,
+        override: {
+          brand,
+          model,
+          category,
+          color,
+          material,
+          condition,
+          gradingNotes,
+        },
+      });
 
-      // Curator Narrative (merged description + analysis)
-      const narrative = buildCuratorNarrative(data);
       setCuratorNarrative((prev) => (prev ? prev : narrative));
     } catch (err) {
       console.error(err);
@@ -428,7 +416,6 @@ export default function IntakePage() {
       sources: [],
     });
     setAiData(null);
-    setAiQuickFacts(emptyQuickFacts);
     setImages(Array(12).fill(null));
     setListForSale(false);
 
@@ -471,7 +458,7 @@ export default function IntakePage() {
             EMZLoveLuxury — Intake + Curator AI v2.0
           </h1>
           <p style={{ fontSize: "12px", color: "#9ca3af", marginTop: "4px" }}>
-            Photos + your grade in, curated narrative and valuation out.
+            Photos + your grade in, a neon-blue curator profile out.
           </p>
           {errorMsg && (
             <p style={{ fontSize: "12px", color: "#fecaca", marginTop: "4px" }}>
@@ -495,7 +482,7 @@ export default function IntakePage() {
               borderRadius: "999px",
               border: "1px solid #facc15",
               background: "#facc15",
-              color: "#111827",
+              color: "#020617",
               fontWeight: 600,
               cursor: isSaving ? "default" : "pointer",
             }}
@@ -558,8 +545,8 @@ export default function IntakePage() {
             Photos & Condition
           </h2>
           <p style={{ fontSize: "11px", color: "#6b7280", marginBottom: "8px" }}>
-            Load your best angles, then grade the item. Curator AI will use
-            both your grade and the photos for valuation.
+            Load your best angles, then grade the item. Curator AI will use your
+            grade and the photos for valuation.
           </p>
 
           {/* Photo grid */}
@@ -582,7 +569,9 @@ export default function IntakePage() {
                     position: "relative",
                     height: "150px",
                     borderRadius: "12px",
-                    border: isFilled ? "1px solid #2563eb" : "1px solid #374151",
+                    border: isFilled
+                      ? "1px solid #38bdf8"
+                      : "1px solid #374151",
                     backgroundImage: isFilled
                       ? `url(${img.url})`
                       : `url(${src})`,
@@ -672,19 +661,21 @@ export default function IntakePage() {
               padding: "8px 14px",
               fontSize: "12px",
               borderRadius: "999px",
-              border: "1px solid #2563eb",
-              background: isAnalyzing ? "#1e293b" : "#1d4ed8",
+              border: "1px solid #38bdf8",
+              background: isAnalyzing ? "#0f172a" : "#1d4ed8",
               color: "#e5e7eb",
               fontWeight: 600,
               cursor: isAnalyzing ? "default" : "pointer",
-              boxShadow: "0 0 0 1px rgba(37,99,235,0.4)",
+              boxShadow:
+                "0 0 25px rgba(56,189,248,0.35), 0 0 3px rgba(37,99,235,0.9)",
+              textShadow: "0 0 6px rgba(15,23,42,0.9)",
             }}
           >
             {isAnalyzing ? "Curator AI Thinking…" : "Run Curator AI"}
           </button>
           <p style={{ fontSize: "10px", color: "#9ca3af", marginTop: "6px" }}>
-            Uses photos + your grade to propose identity, narrative, and
-            valuation. You can edit everything before saving.
+            Uses photos + your grade to build a complete curator profile you
+            can edit and print.
           </p>
         </section>
 
@@ -700,10 +691,12 @@ export default function IntakePage() {
           <div
             style={{
               background:
-                "linear-gradient(135deg, rgba(30,64,175,0.35), rgba(15,23,42,1))",
+                "radial-gradient(circle at top, rgba(56,189,248,0.32), rgba(15,23,42,1))",
               borderRadius: "16px",
-              border: "1px solid #facc15",
+              border: "1px solid rgba(56,189,248,0.9)",
               padding: "12px",
+              boxShadow:
+                "0 0 30px rgba(56,189,248,0.35), 0 0 4px rgba(15,23,42,1)",
             }}
           >
             <div
@@ -720,37 +713,40 @@ export default function IntakePage() {
                   fontWeight: 600,
                   textTransform: "uppercase",
                   letterSpacing: "0.16em",
-                  color: "#facc15",
+                  color: "#e0f2fe",
                 }}
               >
-                Curator Narrative
+                Curator Narrative · Print Card
               </h2>
               <span
                 style={{
                   fontSize: "10px",
                   borderRadius: "999px",
                   padding: "2px 8px",
-                  border: "1px solid rgba(250,204,21,0.7)",
+                  border: "1px solid rgba(250,204,21,0.6)",
                   color: "#facc15",
-                  background: "rgba(15,23,42,0.7)",
+                  background: "rgba(15,23,42,0.85)",
                 }}
               >
-                AI Draft · You Finalize
+                Neon Draft · You Approve
               </span>
             </div>
             <textarea
               value={curatorNarrative}
               onChange={(e) => setCuratorNarrative(e.target.value)}
-              rows={8}
+              rows={12}
               style={{
                 ...inputStyle,
-                minHeight: "140px",
+                minHeight: "220px",
                 fontSize: "11px",
                 lineHeight: 1.45,
-                background: "rgba(15,23,42,0.9)",
+                background: "rgba(15,23,42,0.96)",
                 borderColor: "#1e293b",
+                color: "#e5e7eb",
               }}
-              placeholder="When you run Curator AI, a sales-forward description with model notes will appear here. You can edit this before listing or going live."
+              placeholder={
+                "When you run Curator AI, a complete profile appears here: identity, measurements, features, market note, value range, and sales-forward description — ready to print or read live."
+              }
             />
           </div>
 
@@ -907,200 +903,6 @@ export default function IntakePage() {
                 </p>
               )}
             </div>
-          </div>
-
-          {/* Quick Facts Card */}
-          <div
-            style={{
-              background: "#020617",
-              borderRadius: "16px",
-              border: "1px solid #2563eb",
-              padding: "12px",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "4px",
-              }}
-            >
-              <h2
-                style={{
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.14em",
-                  color: "#bfdbfe",
-                }}
-              >
-                AI Quick Facts
-              </h2>
-              <span
-                style={{
-                  fontSize: "10px",
-                  borderRadius: "999px",
-                  padding: "2px 8px",
-                  border: "1px solid rgba(37,99,235,0.7)",
-                  color: "#bfdbfe",
-                  background: "rgba(15,23,42,0.7)",
-                }}
-              >
-                Editable
-              </span>
-            </div>
-
-            <label style={labelStyle}>Model Name</label>
-            <input
-              type="text"
-              value={aiQuickFacts.modelName}
-              onChange={(e) =>
-                setAiQuickFacts((prev) => ({
-                  ...prev,
-                  modelName: e.target.value,
-                }))
-              }
-              style={inputStyle}
-              placeholder="Favorite MM, Alma PM, etc."
-            />
-
-            <label style={labelStyle}>Production Years</label>
-            <input
-              type="text"
-              value={aiQuickFacts.productionYears}
-              onChange={(e) =>
-                setAiQuickFacts((prev) => ({
-                  ...prev,
-                  productionYears: e.target.value,
-                }))
-              }
-              style={inputStyle}
-              placeholder="2012–2016, etc."
-            />
-
-            <label style={labelStyle}>Typical Materials</label>
-            <input
-              type="text"
-              value={aiQuickFacts.materials}
-              onChange={(e) =>
-                setAiQuickFacts((prev) => ({
-                  ...prev,
-                  materials: e.target.value,
-                }))
-              }
-              style={inputStyle}
-              placeholder="Monogram canvas, vachetta leather…"
-            />
-
-            <label style={labelStyle}>Common Colors</label>
-            <input
-              type="text"
-              value={aiQuickFacts.colors}
-              onChange={(e) =>
-                setAiQuickFacts((prev) => ({
-                  ...prev,
-                  colors: e.target.value,
-                }))
-              }
-              style={inputStyle}
-              placeholder="Monogram, DA, DE, Noir…"
-            />
-
-            <label style={labelStyle}>Key Features (Live Selling)</label>
-            <textarea
-              rows={3}
-              value={aiQuickFacts.features}
-              onChange={(e) =>
-                setAiQuickFacts((prev) => ({
-                  ...prev,
-                  features: e.target.value,
-                }))
-              }
-              style={{ ...inputStyle, minHeight: "70px" }}
-              placeholder={"• Magnetic flap closure\n• Detachable strap\n• Interior slip pocket"}
-            />
-
-            <label style={labelStyle}>Typical Measurements</label>
-            <input
-              type="text"
-              value={aiQuickFacts.measurements}
-              onChange={(e) =>
-                setAiQuickFacts((prev) => ({
-                  ...prev,
-                  measurements: e.target.value,
-                }))
-              }
-              style={inputStyle}
-              placeholder='e.g. L: 10.6" · H: 6.3" · D: 1.8"'
-            />
-
-            <label style={labelStyle}>Availability / Market Note</label>
-            <input
-              type="text"
-              value={aiQuickFacts.availabilityNote}
-              onChange={(e) =>
-                setAiQuickFacts((prev) => ({
-                  ...prev,
-                  availabilityNote: e.target.value,
-                }))
-              }
-              style={inputStyle}
-              placeholder="Discontinued; strong resale demand."
-            />
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: "8px",
-              }}
-            >
-              <div>
-                <label style={labelStyle}>Value Low (USD)</label>
-                <input
-                  type="number"
-                  value={aiQuickFacts.valueLow}
-                  onChange={(e) =>
-                    setAiQuickFacts((prev) => ({
-                      ...prev,
-                      valueLow: e.target.value,
-                    }))
-                  }
-                  style={inputStyle}
-                  placeholder="e.g. 650"
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Value High (USD)</label>
-                <input
-                  type="number"
-                  value={aiQuickFacts.valueHigh}
-                  onChange={(e) =>
-                    setAiQuickFacts((prev) => ({
-                      ...prev,
-                      valueHigh: e.target.value,
-                    }))
-                  }
-                  style={inputStyle}
-                  placeholder="e.g. 950"
-                />
-              </div>
-            </div>
-
-            <label style={labelStyle}>AI Condition Hint (Optional)</label>
-            <input
-              type="text"
-              value={aiQuickFacts.conditionHint}
-              onChange={(e) =>
-                setAiQuickFacts((prev) => ({
-                  ...prev,
-                  conditionHint: e.target.value,
-                }))
-              }
-              style={inputStyle}
-              placeholder="AI impression only – you override."
-            />
           </div>
 
           {/* Included Items */}
@@ -1271,84 +1073,119 @@ export default function IntakePage() {
   );
 }
 
-// ---------- HELPERS FOR AI MAPPING ----------
-function mapResultToQuickFacts(aiResult) {
-  if (!aiResult) return {};
+// ---------- HELPERS ----------
 
-  const identity = aiResult.identity || {};
-  const pricing = aiResult.pricing || {};
-  const dims = aiResult.dimensions || {};
-  const availability = aiResult.availability || {};
-  const featureBullets = aiResult.description?.feature_bullets || [];
-
-  const measurementsParts = [];
-  if (dims.length) measurementsParts.push(`L: ${dims.length}`);
-  if (dims.height) measurementsParts.push(`H: ${dims.height}`);
-  if (dims.depth) measurementsParts.push(`D: ${dims.depth}`);
-
-  return {
-    modelName: identity.model || "",
-    brand: identity.brand || "",
-    category: identity.category_primary || "",
-    productionYears: identity.year_range || "",
-    materials: identity.material || "",
-    colors: identity.color || "",
-    features: featureBullets.join("\n") || "",
-    measurements: measurementsParts.join(" · "),
-    availabilityNote:
-      availability.market_rarity || aiResult.included_items_notes || "",
-    valueLow:
-      typeof pricing.comp_low === "number"
-        ? pricing.comp_low.toString()
-        : pricing.comp_low || "",
-    valueHigh:
-      typeof pricing.comp_high === "number"
-        ? pricing.comp_high.toString()
-        : pricing.comp_high || "",
-    conditionHint: "",
-  };
-}
-
-function buildCuratorNarrative(aiResult) {
+// Build one unified narrative that includes ALL facts
+function buildCuratorNarrative({ aiResult, override }) {
   if (!aiResult) return "";
 
   const identity = aiResult.identity || {};
+  const dims = aiResult.dimensions || {};
   const description = aiResult.description || {};
   const availability = aiResult.availability || {};
   const pricing = aiResult.pricing || {};
 
+  const featureBullets = description.feature_bullets || [];
+
+  const brand = override.brand || identity.brand || "";
+  const model = override.model || identity.model || "";
+  const category =
+    override.category || identity.category_primary || identity.category || "";
+  const color = override.color || identity.color || "";
+  const material = override.material || identity.material || "";
+  const condition = override.condition || "";
+
+  const gradingNotes = override.gradingNotes || "";
+
+  // measurements line
+  const measurementsParts = [];
+  if (dims.length) measurementsParts.push(`L: ${dims.length}`);
+  if (dims.height) measurementsParts.push(`H: ${dims.height}`);
+  if (dims.depth) measurementsParts.push(`D: ${dims.depth}`);
+  const measurementsLine =
+    measurementsParts.length > 0
+      ? measurementsParts.join(" · ")
+      : "";
+
   const lines = [];
 
-  const titleParts = [
-    identity.brand,
-    identity.model,
-    identity.style,
-    identity.color,
-  ].filter(Boolean);
-
-  if (titleParts.length) {
-    lines.push(titleParts.join(" · "));
+  // Header / identity
+  if (brand || model) {
+    lines.push(`Brand: ${[brand, model].filter(Boolean).join(" · ")}`);
   }
-
+  if (category) {
+    lines.push(`Category: ${category}`);
+  }
+  if (color) {
+    lines.push(`Color: ${color}`);
+  }
+  if (material) {
+    lines.push(`Material: ${material}`);
+  }
   if (identity.year_range) {
-    lines.push(`Approx. production range: ${identity.year_range}`);
+    lines.push(`Production Range: ${identity.year_range}`);
+  }
+  if (condition) {
+    lines.push(`Condition Grade: ${condition}`);
+  }
+  if (gradingNotes) {
+    lines.push(`Condition Notes: ${gradingNotes}`);
   }
 
-  if (description.sales_forward) {
+  // Measurements
+  if (measurementsLine) {
     lines.push("");
-    lines.push(description.sales_forward);
+    lines.push("Typical Measurements:");
+    lines.push(measurementsLine);
   }
 
-  if (availability.market_rarity) {
+  // Key features
+  if (featureBullets.length > 0) {
     lines.push("");
-    lines.push(`Rarity: ${availability.market_rarity}`);
+    lines.push("Key Features:");
+    featureBullets.forEach((feat) => {
+      lines.push(`• ${feat}`);
+    });
   }
 
+  // Availability / market note
+  const rarityLine =
+    availability.market_rarity || aiResult.included_items_notes || "";
+  if (rarityLine) {
+    lines.push("");
+    lines.push("Market Note:");
+    lines.push(rarityLine);
+  }
+
+  // Pricing insight
   if (pricing.comp_low || pricing.comp_high) {
     const low = pricing.comp_low ?? "";
     const high = pricing.comp_high ?? "";
     lines.push("");
+    lines.push("Pricing Insight:");
     lines.push(`Observed resale range: ${low} – ${high} (approx.)`);
+  }
+
+  if (pricing.retail_price) {
+    lines.push(`Original retail (approx.): ${pricing.retail_price}`);
+  }
+
+  // Sales-forward description
+  if (description.sales_forward) {
+    lines.push("");
+    lines.push("—");
+    lines.push("Sales-Forward Description:");
+    lines.push(description.sales_forward);
+  }
+
+  // Extra model / history / style notes if present
+  if (description.model_notes || description.history || description.styling) {
+    lines.push("");
+    lines.push("—");
+    lines.push("Model Notes & Analysis:");
+    if (description.model_notes) lines.push(description.model_notes);
+    if (description.history) lines.push(description.history);
+    if (description.styling) lines.push(description.styling);
   }
 
   return lines.join("\n");
