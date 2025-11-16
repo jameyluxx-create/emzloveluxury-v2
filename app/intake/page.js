@@ -67,7 +67,16 @@ function generateItemNumber() {
   return `EMZ-${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
 }
 
-// ---------- PLACEHOLDER IMAGES (6 slots now) ----------
+// ---------- helper: escape HTML for print window ----------
+function escapeHtml(str) {
+  if (!str) return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// ---------- PLACEHOLDER IMAGES (6 slots) ----------
 const placeholderImages = [
   "/placeholders/Emzthumb-+AddMain.png",
   "/placeholders/Emzthumb-+AddFront.png",
@@ -92,14 +101,15 @@ export default function IntakePage() {
   const [condition, setCondition] = useState(""); // user must choose before AI
   const [gradingNotes, setGradingNotes] = useState("");
 
+  const [currency, setCurrency] = useState("USD"); // user-selectable currency
   const [cost, setCost] = useState("");
   const [listingPrice, setListingPrice] = useState("");
 
-  // Narrative (merged ALL facts + sales-forward + analysis)
+  // EMZCurator Description (print card)
   const [curatorNarrative, setCuratorNarrative] = useState("");
 
-  // Included items
-  const [includedItems, setIncludedItems] = useState([]);
+  // Included items (as free text; one per line)
+  const [includedText, setIncludedText] = useState("");
 
   // Pricing preview from AI
   const [pricingPreview, setPricingPreview] = useState({
@@ -146,7 +156,7 @@ export default function IntakePage() {
     loadInventory();
   }, []);
 
-  // Auto-grow the Curator Narrative (print card) textarea
+  // Auto-grow the EMZCurator Description textarea
   useEffect(() => {
     if (narrativeRef.current) {
       const el = narrativeRef.current;
@@ -162,7 +172,7 @@ export default function IntakePage() {
       el.style.height = "auto";
       el.style.height = el.scrollHeight + "px";
     }
-  }, [includedItems]);
+  }, [includedText]);
 
   async function loadInventory() {
     try {
@@ -240,6 +250,57 @@ export default function IntakePage() {
     input.click();
   };
 
+  // ---------- PRINT CARD ----------
+  function handlePrintCard() {
+    const printContent = curatorNarrative || "";
+    const itemId = itemNumber || "EMZCurator Card";
+
+    const win = window.open("", "_blank", "width=800,height=600");
+    if (!win) return;
+
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>${escapeHtml(itemId)}</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      padding: 16px;
+      background: #ffffff;
+      color: #111827;
+    }
+    h1 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: #4b5563;
+      margin-bottom: 12px;
+    }
+    pre {
+      white-space: pre-wrap;
+      font-size: 12px;
+      line-height: 1.4;
+      border: 1px solid #d1d5db;
+      padding: 12px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>EMZLove Luxury</h1>
+  <h2>EMZCurator Description · Print Card</h2>
+  <pre>${escapeHtml(printContent)}</pre>
+</body>
+</html>`);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
   // ---------- AI LOOKUP ----------
   async function runAI() {
     const aiImages = images.filter((x) => x && x.url).map((x) => x.url);
@@ -313,9 +374,9 @@ export default function IntakePage() {
         }));
       }
 
-      // Included items
+      // Included items from AI → text with one per line
       if (Array.isArray(data.included_items)) {
-        setIncludedItems(data.included_items);
+        setIncludedText(data.included_items.join("\n"));
       }
 
       // Pricing preview
@@ -330,7 +391,7 @@ export default function IntakePage() {
         });
       }
 
-      // Build unified Curator Narrative that includes all AI facts + item number
+      // Build unified EMZCurator Description that includes all AI facts + item number
       const narrative = buildCuratorNarrative({
         aiResult: data,
         override: {
@@ -391,11 +452,17 @@ export default function IntakePage() {
       ? { ...aiData.seo, user_override: false }
       : null;
 
+    // included items as array
+    const includedItemsArray = includedText
+      .split("\n")
+      .map((x) => x.trim())
+      .filter((x) => x.length > 0);
+
     // future-friendly keyword field (for "ladies fashion", "red wallet" search)
     const search_keywords = buildSearchKeywords({
       identity,
       narrative: curatorNarrative,
-      includedItems,
+      includedItems: includedItemsArray,
     });
 
     const payload = {
@@ -413,13 +480,14 @@ export default function IntakePage() {
       condition,
       condition_notes: gradingNotes || null,
 
+      currency, // store chosen currency
       cost: cost ? Number(cost) : null,
       listing_price: listingPrice ? Number(listingPrice) : null,
 
       images: imagesPayload,
       identity,
       dimensions,
-      included_items: includedItems,
+      included_items: includedItemsArray,
       pricing,
       seo,
       search_keywords,
@@ -427,6 +495,10 @@ export default function IntakePage() {
       status: listForSale ? "ready_to_sell" : "intake",
       is_public: listForSale,
     };
+
+    // NOTE: For global inventory in USD later, you can:
+    // - add cost_usd / listing_price_usd columns
+    // - convert on server using FX rate at time of save
 
     const { error } = await supabase.from("listings").insert(payload);
 
@@ -452,11 +524,12 @@ export default function IntakePage() {
     setMaterial("");
     setCondition("");
     setGradingNotes("");
+    setCurrency("USD");
     setCost("");
     setListingPrice("");
     setCuratorNarrative("");
     setDimensions({ length: "", height: "", depth: "", strap_drop: "" });
-    setIncludedItems([]);
+    setIncludedText("");
     setPricingPreview({
       retail_price: null,
       comp_low: null,
@@ -479,31 +552,41 @@ export default function IntakePage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#020617",
+        background:
+          "radial-gradient(circle at top, #0f172a 0, #020617 45%, #000000 100%)",
         color: "#e5e7eb",
         padding: "16px",
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      {/* SIMPLE HEADER (title only) */}
+      {/* HEADER */}
       <div
         style={{
           maxWidth: "1180px",
           margin: "0 auto 16px auto",
+          padding: "10px 14px",
+          borderRadius: "16px",
+          border: "1px solid rgba(56,189,248,0.6)",
+          background:
+            "linear-gradient(135deg, rgba(15,23,42,0.95), rgba(8,47,73,0.95))",
+          boxShadow:
+            "0 0 35px rgba(56,189,248,0.35), 0 0 6px rgba(250,204,21,0.3)",
         }}
       >
         <h1
           style={{
             fontSize: "18px",
             fontWeight: 700,
-            letterSpacing: "0.08em",
+            letterSpacing: "0.12em",
             textTransform: "uppercase",
+            color: "#e0f2fe",
           }}
         >
-          EMZLoveLuxury — Intake + Curator AI v2.0
+          EMZLoveLuxury · Intake + EMZCurator AI
         </h1>
-        <p style={{ fontSize: "12px", color: "#9ca3af", marginTop: "4px" }}>
-          Photos + your inputs on the left, neon print card on the right.
+        <p style={{ fontSize: "12px", color: "#bfdbfe", marginTop: "4px" }}>
+          Photos + your cost & grade on the left. EMZCurator Description and
+          print card on the right.
         </p>
         {errorMsg && (
           <p style={{ fontSize: "12px", color: "#fecaca", marginTop: "4px" }}>
@@ -528,13 +611,14 @@ export default function IntakePage() {
           alignItems: "flex-start",
         }}
       >
-        {/* LEFT COLUMN – Photos + Cost + Condition + AI Button */}
+        {/* LEFT COLUMN – Photos + Currency + Cost + Condition + AI Button */}
         <section
           style={{
-            background: "#020617",
+            background: "rgba(15,23,42,0.96)",
             borderRadius: "16px",
-            border: "1px solid #1e293b",
+            border: "1px solid rgba(30,64,175,0.9)",
             padding: "12px",
+            boxShadow: "0 0 25px rgba(37,99,235,0.3)",
           }}
         >
           <h2
@@ -543,15 +627,15 @@ export default function IntakePage() {
               fontWeight: 600,
               textTransform: "uppercase",
               letterSpacing: "0.14em",
-              color: "#9ca3af",
+              color: "#93c5fd",
               marginBottom: "8px",
             }}
           >
             Photos & Condition
           </h2>
-          <p style={{ fontSize: "11px", color: "#6b7280", marginBottom: "8px" }}>
-            Load your best angles, set your cost and grade the item. Curator AI
-            will use your grade and buy-in with the photos for valuation.
+          <p style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "8px" }}>
+            Load your best angles, pick your working currency, set cost and
+            grade. EMZCurator uses these with the photos for valuation.
           </p>
 
           {/* Photo grid (6 slots) */}
@@ -627,14 +711,33 @@ export default function IntakePage() {
             })}
           </div>
 
+          {/* Currency */}
+          <label style={labelStyle}>Currency</label>
+          <select
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="USD">USD – US Dollar</option>
+            <option value="PHP">PHP – Philippine Peso</option>
+            <option value="JPY">JPY – Japanese Yen</option>
+            <option value="EUR">EUR – Euro</option>
+          </select>
+          <p style={{ fontSize: "10px", color: "#9ca3af", marginTop: "-4px" }}>
+            Used for your cost and target listing price. Global inventory can
+            normalize to USD later.
+          </p>
+
           {/* Cost */}
-          <label style={labelStyle}>Cost (Your Buy-In, USD)</label>
+          <label style={labelStyle}>
+            Cost (Your Buy-In, {currency})
+          </label>
           <input
             type="number"
             value={cost}
             onChange={(e) => setCost(e.target.value)}
             style={inputStyle}
-            placeholder="e.g. 350"
+            placeholder={`e.g. 350`}
           />
 
           {/* Condition & notes */}
@@ -655,7 +758,7 @@ export default function IntakePage() {
             <option value="U">U – Contemporary Brand</option>
           </select>
           <p style={{ fontSize: "10px", color: "#facc15", marginTop: "-4px" }}>
-            Curator AI will not run until you choose a grade.
+            EMZCurator will not run until you choose a grade.
           </p>
 
           <label style={labelStyle}>Grading Notes (user only)</label>
@@ -686,15 +789,15 @@ export default function IntakePage() {
               textShadow: "0 0 6px rgba(15,23,42,0.9)",
             }}
           >
-            {isAnalyzing ? "Curator AI Thinking…" : "Run Curator AI"}
+            {isAnalyzing ? "EMZCurator Thinking…" : "Run EMZCurator AI"}
           </button>
           <p style={{ fontSize: "10px", color: "#9ca3af", marginTop: "6px" }}>
-            Uses photos + your cost and grade to build a complete curator
-            profile you can edit and print.
+            Uses photos + your cost and grade to build a complete description
+            you can print and read live.
           </p>
         </section>
 
-        {/* RIGHT COLUMN – Item # + Print Card + Pricing + Included Items */}
+        {/* RIGHT COLUMN – Item # + EMZCurator Description + Pricing + Included Items */}
         <section
           style={{
             display: "flex",
@@ -772,16 +875,16 @@ export default function IntakePage() {
             </div>
           </div>
 
-          {/* Curator Narrative Hero (Print Card) */}
+          {/* EMZCurator Description Hero (Print Card) */}
           <div
             style={{
               background:
-                "radial-gradient(circle at top, rgba(56,189,248,0.32), rgba(15,23,42,1))",
+                "radial-gradient(circle at top, rgba(56,189,248,0.4), rgba(15,23,42,1))",
               borderRadius: "16px",
               border: "1px solid rgba(56,189,248,0.9)",
               padding: "12px",
               boxShadow:
-                "0 0 30px rgba(56,189,248,0.35), 0 0 4px rgba(15,23,42,1)",
+                "0 0 30px rgba(56,189,248,0.45), 0 0 6px rgba(250,204,21,0.4)",
             }}
           >
             <div
@@ -801,20 +904,37 @@ export default function IntakePage() {
                   color: "#e0f2fe",
                 }}
               >
-                Curator Narrative · Print Card
+                EMZCurator Description
               </h2>
-              <span
-                style={{
-                  fontSize: "10px",
-                  borderRadius: "999px",
-                  padding: "2px 8px",
-                  border: "1px solid rgba(250,204,21,0.6)",
-                  color: "#facc15",
-                  background: "rgba(15,23,42,0.85)",
-                }}
-              >
-                Neon Draft · You Approve
-              </span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    borderRadius: "999px",
+                    padding: "2px 8px",
+                    border: "1px solid rgba(250,204,21,0.6)",
+                    color: "#facc15",
+                    background: "rgba(15,23,42,0.85)",
+                  }}
+                >
+                  Print Card Text
+                </span>
+                <button
+                  type="button"
+                  onClick={handlePrintCard}
+                  style={{
+                    fontSize: "10px",
+                    padding: "4px 10px",
+                    borderRadius: "999px",
+                    border: "1px solid rgba(56,189,248,0.9)",
+                    background: "rgba(15,23,42,0.9)",
+                    color: "#e0f2fe",
+                    cursor: "pointer",
+                  }}
+                >
+                  Print Card
+                </button>
+              </div>
             </div>
             <textarea
               ref={narrativeRef}
@@ -832,7 +952,7 @@ export default function IntakePage() {
                 overflow: "hidden",
               }}
               placeholder={
-                "When you run Curator AI, a complete profile appears here: item number, identity, measurements, features, market note, value range, and sales-forward description — ready to print or read live."
+                "When you run EMZCurator AI, a complete description appears here: item number, identity, measurements, features, market note, value range, and sales-forward description — ready to print or read live."
               }
             />
           </div>
@@ -840,7 +960,7 @@ export default function IntakePage() {
           {/* Pricing & Status Card (Listing Price + AI Preview) */}
           <div
             style={{
-              background: "#020617",
+              background: "rgba(15,23,42,0.96)",
               borderRadius: "16px",
               border: "1px solid #1f2937",
               padding: "12px",
@@ -852,20 +972,22 @@ export default function IntakePage() {
                 fontWeight: 600,
                 textTransform: "uppercase",
                 letterSpacing: "0.14em",
-                color: "#9ca3af",
+                color: "#93c5fd",
                 marginBottom: "8px",
               }}
             >
               Pricing & Status
             </h2>
 
-            <label style={labelStyle}>Target Listing Price (USD)</label>
+            <label style={labelStyle}>
+              Target Listing Price ({currency})
+            </label>
             <input
               type="number"
               value={listingPrice}
               onChange={(e) => setListingPrice(e.target.value)}
               style={inputStyle}
-              placeholder="AI suggested price or your own"
+              placeholder={`EMZCurator suggestion or your own`}
             />
 
             <div
@@ -880,7 +1002,7 @@ export default function IntakePage() {
               <strong style={{ fontSize: "12px" }}>AI Pricing Preview</strong>
               {pricingPreview.retail_price && (
                 <p style={previewStyle}>
-                  Retail: {pricingPreview.retail_price}
+                  Retail (approx., likely USD): {pricingPreview.retail_price}
                 </p>
               )}
               {pricingPreview.comp_low && (
@@ -909,7 +1031,7 @@ export default function IntakePage() {
           {/* Included Items */}
           <div
             style={{
-              background: "#020617",
+              background: "rgba(15,23,42,0.96)",
               borderRadius: "16px",
               border: "1px solid #1f2937",
               padding: "12px",
@@ -921,7 +1043,7 @@ export default function IntakePage() {
                 fontWeight: 600,
                 textTransform: "uppercase",
                 letterSpacing: "0.14em",
-                color: "#9ca3af",
+                color: "#93c5fd",
                 marginBottom: "8px",
               }}
             >
@@ -939,14 +1061,8 @@ export default function IntakePage() {
             </p>
             <textarea
               ref={includedRef}
-              value={includedItems.join("\n")}
-              onChange={(e) => {
-                const lines = e.target.value
-                  .split("\n")
-                  .map((x) => x.trim())
-                  .filter((x) => x.length > 0);
-                setIncludedItems(lines);
-              }}
+              value={includedText}
+              onChange={(e) => setIncludedText(e.target.value)}
               style={{
                 ...inputStyle,
                 minHeight: "80px",
@@ -967,7 +1083,7 @@ export default function IntakePage() {
           padding: "12px",
           borderRadius: "16px",
           border: "1px solid #1f2937",
-          background: "#020617",
+          background: "rgba(15,23,42,0.96)",
         }}
       >
         <h3 style={{ fontSize: "14px", fontWeight: 600, marginBottom: "8px" }}>
