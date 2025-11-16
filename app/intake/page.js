@@ -16,12 +16,12 @@ async function resizeImage(file, maxSize = 1200, quality = 0.8) {
 
         if (width > height) {
           if (width > maxSize) {
-            height = (height * maxSize) / width;
+            height = Math.round((height * maxSize) / width);
             width = maxSize;
           }
         } else {
           if (height > maxSize) {
-            width = (width * maxSize) / height;
+            width = Math.round((width * maxSize) / height);
             height = maxSize;
           }
         }
@@ -70,6 +70,22 @@ const placeholderImages = [
   "/placeholders/Emzthumb-+AddDetails.png",
 ];
 
+// ---------- QUICK FACTS SHAPE ----------
+const emptyQuickFacts = {
+  modelName: "",
+  brand: "",
+  category: "",
+  productionYears: "",
+  materials: "",
+  colors: "",
+  features: "",
+  measurements: "",
+  availabilityNote: "",
+  valueLow: "",
+  valueHigh: "",
+  conditionHint: "",
+};
+
 export default function IntakePage() {
   // TODO: replace with actual Supabase auth
   const currentUserId = "demo-user-123";
@@ -78,13 +94,13 @@ export default function IntakePage() {
   const [itemNumber, setItemNumber] = useState("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
-  const [description, setDescription] = useState(""); // formerly notes
+  const [description, setDescription] = useState(""); // sales-forward
   const [category, setCategory] = useState("");
   const [condition, setCondition] = useState("A");
   const [cost, setCost] = useState("");
   const [listingPrice, setListingPrice] = useState("");
 
-  // NEW FIELDS: Dimensions
+  // Dimensions
   const [dimensions, setDimensions] = useState({
     length: "",
     height: "",
@@ -92,10 +108,10 @@ export default function IntakePage() {
     strap_drop: "",
   });
 
-  // NEW FIELDS: Included items (Option C)
+  // Included items (from AI, editable list of strings)
   const [includedItems, setIncludedItems] = useState([]);
 
-  // NEW FIELDS: Pricing preview from AI
+  // Pricing preview from AI
   const [pricingPreview, setPricingPreview] = useState({
     retail_price: null,
     comp_low: null,
@@ -105,16 +121,21 @@ export default function IntakePage() {
     sources: [],
   });
 
-  // "List for sale"
+  // Listing controls
   const [listForSale, setListForSale] = useState(false);
 
   // AI output (full structured)
   const [aiData, setAiData] = useState(null);
 
-  // 12 thumbnails
+  // NEW: AI Quick Facts (editable panel)
+  const [aiQuickFacts, setAiQuickFacts] = useState(emptyQuickFacts);
+  const [aiAnalysis, setAiAnalysis] = useState("");
+  const [showFullAnalysis, setShowFullAnalysis] = useState(false);
+
+  // Photo grid (12 slots)
   const [images, setImages] = useState(Array(12).fill(null));
 
-  // Status, errors
+  // Flags
   const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -129,19 +150,23 @@ export default function IntakePage() {
   }, []);
 
   async function loadInventory() {
-    const { data: allListings } = await supabase
-      .from("listings")
-      .select("*")
-      .order("created_at", { ascending: false });
+    try {
+      const { data: allListings } = await supabase
+        .from("listings")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    const { data: myListings } = await supabase
-      .from("listings")
-      .select("*")
-      .eq("user_id", currentUserId)
-      .order("created_at", { ascending: false });
+      const { data: myListings } = await supabase
+        .from("listings")
+        .select("*")
+        .eq("user_id", currentUserId)
+        .order("created_at", { ascending: false });
 
-    if (allListings) setGlobalInventory(allListings);
-    if (myListings) setUserInventory(myListings);
+      if (allListings) setGlobalInventory(allListings);
+      if (myListings) setUserInventory(myListings);
+    } catch (err) {
+      console.error("Error loading inventory", err);
+    }
   }
 
   // ---------- REPLACE IMAGE ----------
@@ -151,16 +176,20 @@ export default function IntakePage() {
     input.accept = "image/*";
 
     input.onchange = async (e) => {
-      const file = e.target.files[0];
+      const file = e.target.files && e.target.files[0];
       if (!file) return;
 
       try {
         const resizedBlob = await resizeImage(file, 1200, 0.8);
-        const filePath = `${currentUserId}/${Date.now()}-${slotIndex}.jpg`;
+        const ext = file.name.split(".").pop() || "jpg";
+        const fileName = `${Date.now()}-${slotIndex}.${ext}`;
+        const filePath = `${currentUserId}/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
           .from("intake-photos")
           .upload(filePath, resizedBlob, {
+            cacheControl: "3600",
+            upsert: false,
             contentType: "image/jpeg",
           });
 
@@ -177,7 +206,7 @@ export default function IntakePage() {
         const next = [...images];
         next[slotIndex] = {
           url: publicUrl,
-          storagePath: filePath,
+          filePath,
           name: file.name,
         };
         setImages(next);
@@ -199,9 +228,11 @@ export default function IntakePage() {
       return;
     }
 
-    try {
-      setIsAnalyzing(true);
+    setIsAnalyzing(true);
+    setErrorMsg("");
+    setSuccessMsg("");
 
+    try {
       const response = await fetch("/api/ai-intake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -225,19 +256,21 @@ export default function IntakePage() {
 
       // ---------- Fill top-level fields ----------
       if (data.identity) {
-        if (data.identity.brand)
+        if (data.identity.brand) {
           setBrand((prev) => prev || data.identity.brand);
-
-        if (data.identity.model)
+        }
+        if (data.identity.model) {
           setModel((prev) => prev || data.identity.model);
-
-        if (data.identity.category_primary)
+        }
+        if (data.identity.category_primary) {
           setCategory((prev) => prev || data.identity.category_primary);
+        }
       }
 
       // ---------- Description ----------
-      if (data.description?.sales_forward)
+      if (data.description?.sales_forward) {
         setDescription((prev) => prev || data.description.sales_forward);
+      }
 
       // ---------- Dimensions ----------
       if (data.dimensions) {
@@ -264,12 +297,18 @@ export default function IntakePage() {
           whatnot_start: data.pricing.whatnot_start || null,
           sources: data.pricing.sources || [],
         });
-
-        // If user hasn't typed a listing price yet, suggest one
-        if (!listingPrice && data.pricing.recommended_listing) {
-          setListingPrice(data.pricing.recommended_listing);
-        }
       }
+
+      // ---------- Quick Facts Panel ----------
+      const mappedFacts = mapResultToQuickFacts(data);
+      setAiQuickFacts((prev) => ({
+        ...prev,
+        ...mappedFacts,
+      }));
+
+      // ---------- Full Analysis Text ----------
+      const analysisText = buildAnalysisText(data);
+      setAiAnalysis(analysisText);
     } catch (err) {
       console.error(err);
       alert("AI lookup failed.");
@@ -277,6 +316,7 @@ export default function IntakePage() {
       setIsAnalyzing(false);
     }
   }
+
   // ---------- SAVE ITEM ----------
   async function handleSave() {
     setIsSaving(true);
@@ -290,6 +330,13 @@ export default function IntakePage() {
       brand: brand || null,
       model: model || null,
       category_primary: category || null,
+      style: "",
+      color: "",
+      material: "",
+      hardware: "",
+      pattern: "",
+      year_range: "",
+      category_secondary: [],
     };
 
     const pricing = aiData?.pricing || null;
@@ -311,7 +358,7 @@ export default function IntakePage() {
       listing_price: listingPrice ? Number(listingPrice) : null,
       images: imagesPayload,
 
-      // new structured fields
+      // structured fields from AI
       identity,
       dimensions,
       included_items: includedItems,
@@ -357,12 +404,15 @@ export default function IntakePage() {
       whatnot_start: null,
       sources: [],
     });
+    setAiData(null);
+    setAiQuickFacts(emptyQuickFacts);
+    setAiAnalysis("");
     setImages(Array(12).fill(null));
     setListForSale(false);
-    setAiData(null);
 
-    // reload user + global inventory
-    loadInventory();
+    // refresh inventory summary
+    await loadInventory();
+
     setIsSaving(false);
   }
 
@@ -371,440 +421,924 @@ export default function IntakePage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#f1f5f9",
-        color: "#0f172a",
+        background: "#0f172a",
+        color: "#e5e7eb",
         padding: "16px",
-        fontFamily: "system-ui, -apple-system, sans-serif",
+        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      <h1 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "8px" }}>
-        EMZLove Luxury — Intake
-      </h1>
-
-      {/* PHOTO GRID */}
+      {/* HEADER */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, 240px)",
+          maxWidth: "1180px",
+          margin: "0 auto 16px auto",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
           gap: "12px",
-          marginBottom: "24px",
         }}
       >
-        {placeholderImages.map((src, idx) => (
-          <div
-            key={idx}
-            onClick={() => handleReplaceImage(idx)}
+        <div>
+          <h1
             style={{
-              position: "relative",
-              width: "240px",
-              height: "240px",
-              borderRadius: "10px",
-              border: "1px solid #cbd5e1",
-              background: "#e2e8f0",
-              overflow: "hidden",
-              cursor: "pointer",
+              fontSize: "18px",
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
             }}
           >
-            <img
-              src={images[idx]?.url || src}
-              alt={`slot-${idx}`}
+            EMZLoveLuxury — Intake + Curator AI v2.0
+          </h1>
+          <p style={{ fontSize: "12px", color: "#9ca3af", marginTop: "4px" }}>
+            Upload. Identify. Prepare for listing. AI assists — you decide.
+          </p>
+          {errorMsg && (
+            <p style={{ fontSize: "12px", color: "#fecaca", marginTop: "4px" }}>
+              {errorMsg}
+            </p>
+          )}
+          {successMsg && (
+            <p style={{ fontSize: "12px", color: "#bbf7d0", marginTop: "4px" }}>
+              {successMsg}
+            </p>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+          <button
+            onClick={runAI}
+            disabled={isAnalyzing}
+            style={{
+              padding: "8px 14px",
+              fontSize: "12px",
+              borderRadius: "999px",
+              border: "1px solid #22c55e",
+              background: isAnalyzing ? "#14532d" : "transparent",
+              color: "#bbf7d0",
+              cursor: isAnalyzing ? "default" : "pointer",
+            }}
+          >
+            {isAnalyzing ? "AI Thinking…" : "Run Curator AI"}
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            style={{
+              padding: "8px 16px",
+              fontSize: "12px",
+              borderRadius: "999px",
+              border: "none",
+              background: "#22c55e",
+              color: "#022c22",
+              fontWeight: 600,
+              cursor: isSaving ? "default" : "pointer",
+            }}
+          >
+            {isSaving
+              ? "Saving…"
+              : listForSale
+              ? "Save & Mark Ready to Sell"
+              : "Save to Inventory"}
+          </button>
+        </div>
+      </div>
+
+      {/* MAIN 3-COLUMN GRID */}
+      <div
+        style={{
+          maxWidth: "1180px",
+          margin: "0 auto",
+          display: "grid",
+          gridTemplateColumns: "1.05fr 1.15fr 0.9fr",
+          gap: "16px",
+          alignItems: "flex-start",
+        }}
+      >
+        {/* LEFT COLUMN – Photos */}
+        <section
+          style={{
+            background: "#020617",
+            borderRadius: "16px",
+            border: "1px solid #1f2937",
+            padding: "12px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "12px",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.12em",
+              color: "#9ca3af",
+              marginBottom: "8px",
+            }}
+          >
+            Photos & AI Input
+          </h2>
+          <p style={{ fontSize: "11px", color: "#6b7280", marginBottom: "8px" }}>
+            Tap a tile to upload or replace. Front, back, interior, logo, and
+            date code give the AI its best shot.
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: "8px",
+            }}
+          >
+            {placeholderImages.map((src, idx) => {
+              const img = images[idx];
+              const isFilled = !!img;
+              return (
+                <div
+                  key={idx}
+                  onClick={() => handleReplaceImage(idx)}
+                  style={{
+                    position: "relative",
+                    height: "150px",
+                    borderRadius: "12px",
+                    border: isFilled ? "1px solid #4ade80" : "1px solid #374151",
+                    backgroundImage: isFilled
+                      ? `url(${img.url})`
+                      : `url(${src})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                    backgroundColor: "#111827",
+                    cursor: "pointer",
+                    overflow: "hidden",
+                  }}
+                >
+                  {!isFilled && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "11px",
+                        color: "#9ca3af",
+                        backdropFilter: "blur(2px)",
+                        background:
+                          "linear-gradient(to top, rgba(15,23,42,0.9), rgba(15,23,42,0.4))",
+                      }}
+                    >
+                      Click to Add
+                    </div>
+                  )}
+                  {isFilled && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        padding: "4px 6px",
+                        fontSize: "10px",
+                        color: "#e5e7eb",
+                        background:
+                          "linear-gradient(to top, rgba(15,23,42,0.9), transparent)",
+                      }}
+                    >
+                      {img.name || "Uploaded image"}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* MIDDLE COLUMN – Intake Form */}
+        <section
+          style={{
+            background: "#020617",
+            borderRadius: "16px",
+            border: "1px solid #1f2937",
+            padding: "12px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "12px",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.12em",
+              color: "#9ca3af",
+              marginBottom: "8px",
+            }}
+          >
+            Intake Details
+          </h2>
+
+          {/* SKU / Item number */}
+          <label style={labelStyle}>Item Number / SKU</label>
+          <input
+            type="text"
+            value={itemNumber}
+            onChange={(e) => setItemNumber(e.target.value)}
+            style={inputStyle}
+            placeholder="Internal reference (optional)"
+          />
+
+          {/* Brand & Model */}
+          <label style={labelStyle}>Brand</label>
+          <input
+            type="text"
+            value={brand}
+            onChange={(e) => setBrand(e.target.value)}
+            style={inputStyle}
+            placeholder="Louis Vuitton, Chanel, Gucci…"
+          />
+
+          <label style={labelStyle}>Model / Line</label>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            style={inputStyle}
+            placeholder="Favorite MM, Alma PM, Marmont, etc."
+          />
+
+          {/* Category & Condition */}
+          <label style={labelStyle}>Category</label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">Select</option>
+            <option value="bag">Bag</option>
+            <option value="wallet">Wallet / SLG</option>
+            <option value="accessory">Accessory</option>
+            <option value="other">Other</option>
+          </select>
+
+          <label style={labelStyle}>Condition Grade</label>
+          <select
+            value={condition}
+            onChange={(e) => setCondition(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="N">New</option>
+            <option value="A">Unused</option>
+            <option value="B">Excellent Preloved</option>
+            <option value="C">Functional, Signs of Use</option>
+            <option value="D">Project (Not Public)</option>
+            <option value="U">Contemporary Brand</option>
+          </select>
+
+          {/* Cost & Listing Price */}
+          <label style={labelStyle}>Cost (Your Buy-In, USD)</label>
+          <input
+            type="number"
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+            style={inputStyle}
+            placeholder="e.g. 350"
+          />
+
+          <label style={labelStyle}>Target Listing Price (USD)</label>
+          <input
+            type="number"
+            value={listingPrice}
+            onChange={(e) => setListingPrice(e.target.value)}
+            style={inputStyle}
+            placeholder="AI suggested price or your own"
+          />
+
+          {/* Dimensions */}
+          <h3
+            style={{
+              marginTop: "16px",
+              fontSize: "13px",
+              fontWeight: 600,
+              color: "#e5e7eb",
+            }}
+          >
+            Dimensions
+          </h3>
+
+          <label style={labelStyle}>Length</label>
+          <input
+            type="text"
+            value={dimensions.length}
+            onChange={(e) =>
+              setDimensions((prev) => ({ ...prev, length: e.target.value }))
+            }
+            style={inputStyle}
+            placeholder='e.g. 10.6"'
+          />
+
+          <label style={labelStyle}>Height</label>
+          <input
+            type="text"
+            value={dimensions.height}
+            onChange={(e) =>
+              setDimensions((prev) => ({ ...prev, height: e.target.value }))
+            }
+            style={inputStyle}
+            placeholder='e.g. 6.3"'
+          />
+
+          <label style={labelStyle}>Depth</label>
+          <input
+            type="text"
+            value={dimensions.depth}
+            onChange={(e) =>
+              setDimensions((prev) => ({ ...prev, depth: e.target.value }))
+            }
+            style={inputStyle}
+            placeholder='e.g. 1.8"'
+          />
+
+          <label style={labelStyle}>Strap Drop</label>
+          <input
+            type="text"
+            value={dimensions.strap_drop}
+            onChange={(e) =>
+              setDimensions((prev) => ({ ...prev, strap_drop: e.target.value }))
+            }
+            style={inputStyle}
+            placeholder='e.g. 21"'
+          />
+
+          {/* Included Items */}
+          <h3
+            style={{
+              marginTop: "16px",
+              fontSize: "13px",
+              fontWeight: 600,
+              color: "#e5e7eb",
+            }}
+          >
+            Included Items
+          </h3>
+          <p style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "4px" }}>
+            Example: dust bag, strap, box, authenticity card. One per line.
+          </p>
+          <textarea
+            value={includedItems.join("\n")}
+            onChange={(e) => {
+              const lines = e.target.value
+                .split("\n")
+                .map((x) => x.trim())
+                .filter((x) => x.length > 0);
+              setIncludedItems(lines);
+            }}
+            style={{ ...inputStyle, minHeight: "80px" }}
+            placeholder={"Dust bag\nCrossbody strap\nBox"}
+          />
+
+          {/* Description */}
+          <label style={labelStyle}>Sales-Forward Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            style={{ ...inputStyle, minHeight: "90px" }}
+            placeholder="AI sales-forward description here…"
+          />
+
+          {/* List for sale */}
+          <div style={{ marginTop: "8px" }}>
+            <label
               style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
+                fontSize: "12px",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
               }}
-            />
+            >
+              <input
+                type="checkbox"
+                checked={listForSale}
+                onChange={(e) => setListForSale(e.target.checked)}
+              />
+              Mark as ready to sell (public listing)
+            </label>
+          </div>
+
+          {/* AI Pricing Preview */}
+          <div
+            style={{
+              marginTop: "12px",
+              padding: "10px",
+              borderRadius: "10px",
+              border: "1px solid #1e293b",
+              background: "#020617",
+            }}
+          >
+            <strong style={{ fontSize: "12px" }}>AI Pricing Preview:</strong>
+            {pricingPreview.retail_price && (
+              <p style={previewStyle}>
+                Retail: {pricingPreview.retail_price}
+              </p>
+            )}
+            {pricingPreview.comp_low && (
+              <p style={previewStyle}>Comp Low: {pricingPreview.comp_low}</p>
+            )}
+            {pricingPreview.comp_high && (
+              <p style={previewStyle}>Comp High: {pricingPreview.comp_high}</p>
+            )}
+            {pricingPreview.recommended_listing && (
+              <p style={previewStyle}>
+                Recommended Listing: {pricingPreview.recommended_listing}
+              </p>
+            )}
+            {pricingPreview.whatnot_start && (
+              <p style={previewStyle}>
+                Suggested Whatnot Start: {pricingPreview.whatnot_start}
+              </p>
+            )}
+          </div>
+        </section>
+
+        {/* RIGHT COLUMN – AI Quick Facts + Analysis */}
+        <section
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+          }}
+        >
+          {/* Quick Facts Panel */}
+          <div
+            style={{
+              background: "#022c22",
+              borderRadius: "16px",
+              border: "1px solid #22c55e",
+              padding: "12px",
+            }}
+          >
             <div
               style={{
-                position: "absolute",
-                bottom: 0,
-                left: 0,
-                right: 0,
-                background: "rgba(0,0,0,0.5)",
-                color: "#fff",
-                fontSize: "11px",
-                textAlign: "center",
-                padding: "4px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "4px",
               }}
             >
-              {images[idx] ? "Replace Photo" : "Add Photo"}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* MAIN FORM */}
-      <div
-        style={{
-          maxWidth: "500px",
-          background: "white",
-          padding: "16px",
-          borderRadius: "12px",
-          border: "1px solid #cbd5e1",
-        }}
-      >
-        <h2 style={{ fontSize: "15px", fontWeight: 600 }}>Item Details</h2>
-
-        {/* CONDITION FIRST */}
-        <label style={labelStyle}>Condition</label>
-        <select
-          value={condition}
-          onChange={(e) => setCondition(e.target.value)}
-          style={inputStyle}
-        >
-          <option value="N">New</option>
-          <option value="A">Unused</option>
-          <option value="B">Excellent Preloved</option>
-          <option value="C">Functional, Signs of Use</option>
-          <option value="D">Project (Not Public)</option>
-          <option value="U">Contemporary Brand</option>
-        </select>
-
-        {/* AI BUTTON */}
-        <button
-          onClick={runAI}
-          disabled={isAnalyzing}
-          style={{
-            padding: "8px 14px",
-            background: isAnalyzing ? "#7c3aedaa" : "#7c3aed",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            fontSize: "13px",
-            cursor: "pointer",
-            marginBottom: "12px",
-          }}
-        >
-          {isAnalyzing ? "Analyzing…" : "AI Lookup"}
-        </button>
-
-        {/* MESSAGES */}
-        {errorMsg && (
-          <p style={{ fontSize: "11px", color: "#b91c1c" }}>{errorMsg}</p>
-        )}
-        {successMsg && (
-          <p style={{ fontSize: "11px", color: "#15803d" }}>{successMsg}</p>
-        )}
-
-        {/* SKU */}
-        <label style={labelStyle}>Item Number / SKU</label>
-        <input
-          value={itemNumber}
-          onChange={(e) => setItemNumber(e.target.value)}
-          style={inputStyle}
-          placeholder="EMZ-0001"
-        />
-
-        {/* BRAND */}
-        <label style={labelStyle}>Brand</label>
-        <input
-          value={brand}
-          onChange={(e) => setBrand(e.target.value)}
-          style={inputStyle}
-          placeholder="Gucci, Chanel, Louis Vuitton…"
-        />
-
-        {/* MODEL */}
-        <label style={labelStyle}>Model / Style</label>
-        <input
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          style={inputStyle}
-          placeholder="Soho Disco, Alma BB, Zippy Wallet…"
-        />
-
-        {/* DESCRIPTION */}
-        <label style={labelStyle}>Description</label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          style={{ ...inputStyle, minHeight: "90px" }}
-          placeholder="AI Sales-forward description here…"
-        />
-
-        {/* CATEGORY */}
-        <label style={labelStyle}>Category</label>
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          style={inputStyle}
-        >
-          <option value="">Select</option>
-          <option value="bag">Bag</option>
-          <option value="wallet">Wallet / SLG</option>
-          <option value="accessory">Accessory</option>
-          <option value="other">Other</option>
-        </select>
-
-        {/* DIMENSIONS */}
-        <h3 style={{ marginTop: "16px", fontSize: "14px", fontWeight: 600 }}>
-          Dimensions
-        </h3>
-
-        <label style={labelStyle}>Length</label>
-        <input
-          value={dimensions.length}
-          onChange={(e) =>
-            setDimensions({ ...dimensions, length: e.target.value })
-          }
-          style={inputStyle}
-          placeholder="e.g. 10 in"
-        />
-
-        <label style={labelStyle}>Height</label>
-        <input
-          value={dimensions.height}
-          onChange={(e) =>
-            setDimensions({ ...dimensions, height: e.target.value })
-          }
-          style={inputStyle}
-          placeholder="e.g. 6 in"
-        />
-
-        <label style={labelStyle}>Depth</label>
-        <input
-          value={dimensions.depth}
-          onChange={(e) =>
-            setDimensions({ ...dimensions, depth: e.target.value })
-          }
-          style={inputStyle}
-          placeholder="e.g. 3 in"
-        />
-
-        <label style={labelStyle}>Strap Drop</label>
-        <input
-          value={dimensions.strap_drop}
-          onChange={(e) =>
-            setDimensions({ ...dimensions, strap_drop: e.target.value })
-          }
-          style={inputStyle}
-          placeholder="e.g. 21 in"
-        />
-
-        {/* INCLUDED ITEMS */}
-        <h3 style={{ marginTop: "16px", fontSize: "14px", fontWeight: 600 }}>
-          Included Items
-        </h3>
-
-        {includedItems.map((item, index) => (
-          <div
-            key={index}
-            style={{ display: "flex", alignItems: "center", marginBottom: 8 }}
-          >
-            <input
-              value={item}
-              onChange={(e) => {
-                const updated = [...includedItems];
-                updated[index] = e.target.value;
-                setIncludedItems(updated);
-              }}
-              style={{ ...inputStyle, marginBottom: 0 }}
-            />
-            <button
-              onClick={() => {
-                const updated = includedItems.filter((_, i) => i !== index);
-                setIncludedItems(updated);
-              }}
-              style={{
-                marginLeft: 6,
-                fontSize: "12px",
-                cursor: "pointer",
-                background: "transparent",
-                border: "none",
-                color: "#b91c1c",
-              }}
-            >
-              ❌
-            </button>
-          </div>
-        ))}
-
-        <button
-          onClick={() => setIncludedItems([...includedItems, ""])}
-          style={{
-            fontSize: "12px",
-            color: "#0f172a",
-            background: "#e2e8f0",
-            border: "1px solid #cbd5e1",
-            borderRadius: "4px",
-            padding: "4px 8px",
-            cursor: "pointer",
-            marginBottom: "12px",
-          }}
-        >
-          + Add Item
-        </button>
-
-        {/* PRICING SECTION */}
-        <h3 style={{ fontSize: "14px", fontWeight: 600 }}>Pricing</h3>
-
-        <label style={labelStyle}>Cost (landed)</label>
-        <input
-          type="number"
-          value={cost}
-          onChange={(e) => setCost(e.target.value)}
-          style={inputStyle}
-          placeholder="e.g. 85.00"
-        />
-
-        <label style={labelStyle}>Listing Price (editable)</label>
-        <input
-          type="number"
-          value={listingPrice}
-          onChange={(e) => setListingPrice(e.target.value)}
-          style={inputStyle}
-          placeholder="AI suggested price"
-        />
-
-        {/* Pricing Preview */}
-        <div
-          style={{
-            background: "#f8fafc",
-            border: "1px solid #cbd5e1",
-            borderRadius: "8px",
-            padding: "12px",
-            marginTop: "12px",
-          }}
-        >
-          <p style={{ fontSize: "12px", marginBottom: "4px" }}>
-            <strong>AI Pricing Preview:</strong>
-          </p>
-
-          {pricingPreview.retail_price && (
-            <p style={previewStyle}>
-              Retail Price: {pricingPreview.retail_price}
-            </p>
-          )}
-          {pricingPreview.comp_low && (
-            <p style={previewStyle}>Comp Low: {pricingPreview.comp_low}</p>
-          )}
-          {pricingPreview.comp_high && (
-            <p style={previewStyle}>Comp High: {pricingPreview.comp_high}</p>
-          )}
-          {pricingPreview.recommended_listing && (
-            <p style={previewStyle}>
-              Recommended Listing: {pricingPreview.recommended_listing}
-            </p>
-          )}
-          {pricingPreview.whatnot_start && (
-            <p style={previewStyle}>
-              Suggested Whatnot Start: {pricingPreview.whatnot_start}
-            </p>
-          )}
-        </div>
-
-        {/* LIST FOR SALE */}
-        <div style={{ marginTop: "12px" }}>
-          <label style={{ fontSize: "12px", display: "flex", gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={listForSale}
-              onChange={(e) => setListForSale(e.target.checked)}
-            />
-            List for sale now (public listing)
-          </label>
-        </div>
-
-        {/* SAVE BUTTON */}
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          style={{
-            marginTop: "12px",
-            padding: "8px 14px",
-            background: isSaving ? "#0f172a99" : "#0f172a",
-            color: "white",
-            borderRadius: "6px",
-            border: "none",
-            fontSize: "13px",
-            cursor: "pointer",
-          }}
-        >
-          {isSaving ? "Saving…" : "Add to Inventory"}
-        </button>
-      </div>
-
-      {/* INVENTORY FOOTER */}
-      <div
-        style={{
-          maxWidth: "500px",
-          background: "white",
-          padding: "16px",
-          borderRadius: "12px",
-          border: "1px solid #cbd5e1",
-          marginTop: "24px",
-        }}
-      >
-        <h3 style={{ fontSize: "15px", fontWeight: 600 }}>My Latest Intakes</h3>
-
-        {userInventory.length === 0 ? (
-          <p style={{ fontSize: "11px", color: "#64748b" }}>
-            No items yet.
-          </p>
-        ) : (
-          <ul style={{ padding: 0, listStyle: "none" }}>
-            {userInventory.map((item) => (
-              <li
-                key={item.id}
+              <h2
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: "6px 0",
-                  borderBottom: "1px solid #e2e8f0",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.14em",
+                  color: "#bbf7d0",
                 }}
               >
-                {item.images && item.images.length > 0 ? (
-                  <img
-                    src={item.images[0].url || item.images[0]}
+                AI Quick Facts
+              </h2>
+              <span
+                style={{
+                  fontSize: "10px",
+                  borderRadius: "999px",
+                  padding: "2px 8px",
+                  border: "1px solid #22c55e",
+                  color: "#bbf7d0",
+                }}
+              >
+                Editable
+              </span>
+            </div>
+
+            <label style={labelStyle}>Model Name</label>
+            <input
+              type="text"
+              value={aiQuickFacts.modelName}
+              onChange={(e) =>
+                setAiQuickFacts((prev) => ({
+                  ...prev,
+                  modelName: e.target.value,
+                }))
+              }
+              style={inputStyle}
+              placeholder="Favorite MM, Alma PM, etc."
+            />
+
+            <label style={labelStyle}>Brand</label>
+            <input
+              type="text"
+              value={aiQuickFacts.brand}
+              onChange={(e) =>
+                setAiQuickFacts((prev) => ({
+                  ...prev,
+                  brand: e.target.value,
+                }))
+              }
+              style={inputStyle}
+              placeholder="Louis Vuitton, Chanel…"
+            />
+
+            <label style={labelStyle}>Category</label>
+            <input
+              type="text"
+              value={aiQuickFacts.category}
+              onChange={(e) =>
+                setAiQuickFacts((prev) => ({
+                  ...prev,
+                  category: e.target.value,
+                }))
+              }
+              style={inputStyle}
+              placeholder="Shoulder bag, crossbody, wallet…"
+            />
+
+            <label style={labelStyle}>Production Years</label>
+            <input
+              type="text"
+              value={aiQuickFacts.productionYears}
+              onChange={(e) =>
+                setAiQuickFacts((prev) => ({
+                  ...prev,
+                  productionYears: e.target.value,
+                }))
+              }
+              style={inputStyle}
+              placeholder="2012–2016, etc."
+            />
+
+            <label style={labelStyle}>Typical Materials</label>
+            <input
+              type="text"
+              value={aiQuickFacts.materials}
+              onChange={(e) =>
+                setAiQuickFacts((prev) => ({
+                  ...prev,
+                  materials: e.target.value,
+                }))
+              }
+              style={inputStyle}
+              placeholder="Monogram canvas, vachetta leather…"
+            />
+
+            <label style={labelStyle}>Common Colors</label>
+            <input
+              type="text"
+              value={aiQuickFacts.colors}
+              onChange={(e) =>
+                setAiQuickFacts((prev) => ({
+                  ...prev,
+                  colors: e.target.value,
+                }))
+              }
+              style={inputStyle}
+              placeholder="Monogram, DA, DE, Noir…"
+            />
+
+            <label style={labelStyle}>Key Features (Live Selling)</label>
+            <textarea
+              rows={3}
+              value={aiQuickFacts.features}
+              onChange={(e) =>
+                setAiQuickFacts((prev) => ({
+                  ...prev,
+                  features: e.target.value,
+                }))
+              }
+              style={{ ...inputStyle, minHeight: "70px" }}
+              placeholder={"• Magnetic flap closure\n• Detachable strap\n• Interior slip pocket"}
+            />
+
+            <label style={labelStyle}>Typical Measurements</label>
+            <input
+              type="text"
+              value={aiQuickFacts.measurements}
+              onChange={(e) =>
+                setAiQuickFacts((prev) => ({
+                  ...prev,
+                  measurements: e.target.value,
+                }))
+              }
+              style={inputStyle}
+              placeholder='e.g. 10.6" x 6.3" x 1.8"'
+            />
+
+            <label style={labelStyle}>Availability / Market Note</label>
+            <input
+              type="text"
+              value={aiQuickFacts.availabilityNote}
+              onChange={(e) =>
+                setAiQuickFacts((prev) => ({
+                  ...prev,
+                  availabilityNote: e.target.value,
+                }))
+              }
+              style={inputStyle}
+              placeholder="Discontinued; strong resale demand."
+            />
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: "8px",
+              }}
+            >
+              <div>
+                <label style={labelStyle}>Value Low (USD)</label>
+                <input
+                  type="number"
+                  value={aiQuickFacts.valueLow}
+                  onChange={(e) =>
+                    setAiQuickFacts((prev) => ({
+                      ...prev,
+                      valueLow: e.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                  placeholder="e.g. 650"
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Value High (USD)</label>
+                <input
+                  type="number"
+                  value={aiQuickFacts.valueHigh}
+                  onChange={(e) =>
+                    setAiQuickFacts((prev) => ({
+                      ...prev,
+                      valueHigh: e.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                  placeholder="e.g. 950"
+                />
+              </div>
+            </div>
+
+            <label style={labelStyle}>AI Condition Hint (Optional)</label>
+            <input
+              type="text"
+              value={aiQuickFacts.conditionHint}
+              onChange={(e) =>
+                setAiQuickFacts((prev) => ({
+                  ...prev,
+                  conditionHint: e.target.value,
+                }))
+              }
+              style={inputStyle}
+              placeholder="AI impression only – you override."
+            />
+          </div>
+
+          {/* Full AI Model Analysis */}
+          <div
+            style={{
+              background: "#020617",
+              borderRadius: "16px",
+              border: "1px solid #1f2937",
+              padding: "10px",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setShowFullAnalysis((s) => !s)}
+              style={{
+                width: "100%",
+                border: "none",
+                background: "transparent",
+                color: "#e5e7eb",
+                fontSize: "11px",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.14em",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                cursor: "pointer",
+              }}
+            >
+              <span>AI Full Model Analysis</span>
+              <span style={{ color: "#6b7280" }}>
+                {showFullAnalysis ? "−" : "+"}
+              </span>
+            </button>
+            {showFullAnalysis && (
+              <div style={{ marginTop: "8px" }}>
+                <textarea
+                  value={aiAnalysis}
+                  onChange={(e) => setAiAnalysis(e.target.value)}
+                  rows={10}
+                  style={{
+                    ...inputStyle,
+                    minHeight: "140px",
+                    fontSize: "11px",
+                    lineHeight: 1.4,
+                    background: "#020617",
+                  }}
+                  placeholder="Curator-style narrative, model notes, history, styling notes…"
+                />
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* INVENTORY SUMMARY */}
+      <div
+        style={{
+          maxWidth: "1180px",
+          margin: "20px auto 0 auto",
+          padding: "12px",
+          borderRadius: "16px",
+          border: "1px solid #1f2937",
+          background: "#020617",
+        }}
+      >
+        <h3 style={{ fontSize: "14px", fontWeight: 600, marginBottom: "8px" }}>
+          My Latest Intakes
+        </h3>
+        {userInventory.length === 0 ? (
+          <p style={{ fontSize: "12px", color: "#9ca3af" }}>
+            No items yet. Save an intake to see it here.
+          </p>
+        ) : (
+          <div
+            style={{
+              maxHeight: "220px",
+              overflowY: "auto",
+              borderRadius: "10px",
+              border: "1px solid #111827",
+            }}
+          >
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: "11px",
+              }}
+            >
+              <thead>
+                <tr
+                  style={{
+                    background: "#020617",
+                    borderBottom: "1px solid #111827",
+                  }}
+                >
+                  <th
                     style={{
-                      width: "40px",
-                      height: "40px",
-                      borderRadius: "6px",
-                      objectFit: "cover",
-                      border: "1px solid #cbd5e1",
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: "40px",
-                      height: "40px",
-                      borderRadius: "6px",
-                      border: "1px dashed #cbd5e1",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      fontSize: "9px",
-                      color: "#94a3b8",
+                      textAlign: "left",
+                      padding: "6px 8px",
+                      fontWeight: 600,
                     }}
                   >
-                    no img
-                  </div>
-                )}
-
-                <div>
-                  <div style={{ fontSize: "13px", fontWeight: 500 }}>
-                    {item.brand || "Unknown"} — {item.model || ""}
-                  </div>
-                  <div style={{ fontSize: "10px", color: "#64748b" }}>
-                    {item.item_number ? `#${item.item_number}` : ""}
-                    {item.is_public ? " • PUBLIC" : " • PRIVATE"}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                    SKU
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 8px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Brand
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 8px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Model
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 8px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {userInventory.map((item) => (
+                  <tr
+                    key={item.id}
+                    style={{
+                      borderBottom: "1px solid #020617",
+                      background: "#020617",
+                    }}
+                  >
+                    <td style={{ padding: "4px 8px" }}>
+                      {item.item_number || item.sku || "—"}
+                    </td>
+                    <td style={{ padding: "4px 8px" }}>
+                      {item.brand || "—"}
+                    </td>
+                    <td style={{ padding: "4px 8px" }}>
+                      {item.model || "—"}
+                    </td>
+                    <td style={{ padding: "4px 8px" }}>
+                      {item.status || "intake"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
-        <p style={{ fontSize: "10px", color: "#94a3b8", marginTop: "8px" }}>
+        <p
+          style={{
+            marginTop: "8px",
+            fontSize: "11px",
+            color: "#9ca3af",
+          }}
+        >
           Global inventory: {globalInventory.length} items
         </p>
       </div>
     </div>
   );
+}
+
+// ---------- HELPERS FOR AI MAPPING ----------
+function mapResultToQuickFacts(aiResult) {
+  if (!aiResult) return {};
+
+  const identity = aiResult.identity || {};
+  const pricing = aiResult.pricing || {};
+  const dims = aiResult.dimensions || {};
+  const availability = aiResult.availability || {};
+  const featureBullets = aiResult.description?.feature_bullets || [];
+
+  const measurementsParts = [];
+  if (dims.length) measurementsParts.push(`L: ${dims.length}`);
+  if (dims.height) measurementsParts.push(`H: ${dims.height}`);
+  if (dims.depth) measurementsParts.push(`D: ${dims.depth}`);
+  if (dims.strap_drop) measurementsParts.push(`Strap: ${dims.strap_drop}`);
+
+  return {
+    modelName: identity.model || "",
+    brand: identity.brand || "",
+    category: identity.category_primary || "",
+    productionYears: identity.year_range || "",
+    materials: identity.material || "",
+    colors: identity.color || "",
+    features: featureBullets.join("\n") || "",
+    measurements: measurementsParts.join(" · "),
+    availabilityNote:
+      availability.market_rarity || aiResult.included_items_notes || "",
+    valueLow:
+      typeof pricing.comp_low === "number"
+        ? pricing.comp_low.toString()
+        : pricing.comp_low || "",
+    valueHigh:
+      typeof pricing.comp_high === "number"
+        ? pricing.comp_high.toString()
+        : pricing.comp_high || "",
+    conditionHint: "",
+  };
+}
+
+function buildAnalysisText(aiResult) {
+  if (!aiResult) return "";
+
+  const identity = aiResult.identity || {};
+  const description = aiResult.description || {};
+  const availability = aiResult.availability || {};
+  const pricing = aiResult.pricing || {};
+
+  const lines = [];
+
+  const titleParts = [
+    identity.brand,
+    identity.model,
+    identity.style,
+    identity.color,
+  ].filter(Boolean);
+
+  if (titleParts.length) {
+    lines.push(titleParts.join(" · "));
+  }
+
+  if (identity.year_range) {
+    lines.push(`Approx. production range: ${identity.year_range}`);
+  }
+
+  if (description.sales_forward) {
+    lines.push("");
+    lines.push(description.sales_forward);
+  }
+
+  if (availability.market_rarity) {
+    lines.push("");
+    lines.push(`Rarity: ${availability.market_rarity}`);
+  }
+
+  if (pricing.comp_low || pricing.comp_high) {
+    const low = pricing.comp_low ?? "";
+    const high = pricing.comp_high ?? "";
+    lines.push("");
+    lines.push(`Observed resale range: ${low} – ${high} (approx.)`);
+  }
+
+  return lines.join("\n");
 }
 
 // ---------- STYLE HELPERS ----------
@@ -813,9 +1347,10 @@ const inputStyle = {
   padding: "6px 8px",
   fontSize: "12px",
   borderRadius: "6px",
-  border: "1px solid #cbd5e1",
+  border: "1px solid #1f2937",
   marginBottom: "8px",
-  background: "#f8fafc",
+  background: "#020617",
+  color: "#e5e7eb",
 };
 
 const labelStyle = {
@@ -823,10 +1358,11 @@ const labelStyle = {
   marginTop: "8px",
   marginBottom: "4px",
   display: "block",
+  color: "#9ca3af",
 };
 
 const previewStyle = {
   fontSize: "11px",
   margin: "2px 0",
-  color: "#475569",
+  color: "#9ca3af",
 };
