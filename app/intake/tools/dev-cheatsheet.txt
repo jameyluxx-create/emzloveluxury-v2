@@ -1,0 +1,31 @@
+# EMZLoveLuxury Developer Quick Reference
+
+# Start local server
+npm run dev
+
+# Install a new package
+npm install <package-name>
+
+# Update Next.js
+npm install next@latest
+
+# Check environment variables
+cat .env.local
+
+# Restart development server if it freezes
+Ctrl + C
+npm run dev
+
+# Run lint (if you enable ESLint)
+npm run lint
+
+# Common file locations:
+#   Intake Page: app/intake/page.js
+#   AI Route:    app/api/ai-intake/route.js
+#   Storage:     supabase/storage/intake-photos
+#   Inventory:   listings table in Supabase
+
+# Your standard Git push
+git add .
+git commit -m "Update"
+git push origin main

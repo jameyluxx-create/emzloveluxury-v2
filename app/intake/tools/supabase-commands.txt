@@ -1,0 +1,23 @@
+# Supabase CLI Commands
+
+# Login:
+supabase login
+
+# Link project:
+supabase link --project-ref <your-project-ref>
+
+# Start local dev environment:
+supabase start
+
+# Stop services:
+supabase stop
+
+# Push migrations:
+supabase db push
+
+# Open Supabase Studio:
+supabase studio
+
+# Storage buckets:
+supabase storage ls
+supabase storage create-bucket intake-photos

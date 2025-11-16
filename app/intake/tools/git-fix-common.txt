@@ -1,0 +1,17 @@
+# Fix common Git issues
+
+# 1) Fix "Your branch is ahead/behind" errors:
+git pull origin main --rebase
+
+# 2) Fix merge conflicts when you don't care about local changes:
+git fetch --all
+git reset --hard origin/main
+
+# 3) Undo last commit but keep changes:
+git reset HEAD~
+
+# 4) Delete untracked files/folders:
+git clean -fd
+
+# 5) Check active branch:
+git branch

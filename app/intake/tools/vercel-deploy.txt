@@ -1,0 +1,13 @@
+# Vercel Deployment Commands
+
+# Link project (run once)
+vercel link
+
+# Deploy to preview (safe)
+vercel
+
+# Deploy to production
+vercel --prod
+
+# Check project logs
+vercel logs

@@ -1,0 +1,5 @@
+# EMZLoveLuxury – Standard Website Update Script (Main Branch)
+git status
+git add .
+git commit -m "Update"
+git push origin main
