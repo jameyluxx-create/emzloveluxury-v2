@@ -76,6 +76,16 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;");
 }
 
+// ---------- PLACEHOLDER IMAGES (6 slots) ----------
+const placeholderImages = [
+  "/placeholders/Emzthumb-+AddMain.png",
+  "/placeholders/Emzthumb-+AddFront.png",
+  "/placeholders/Emzthumb-+AddBack.png",
+  "/placeholders/Emzthumb-+AddInside.png",
+  "/placeholders/Emzthumb-+AddLabel.png",
+  "/placeholders/Emzthumb-+AddAuthTags.png",
+];
+
 export default function IntakePage() {
   // TODO: replace with actual Supabase auth
   const currentUserId = "demo-user-123";
@@ -239,7 +249,6 @@ export default function IntakePage() {
 
     input.click();
   };
-
   // ---------- MAIN vs ADDITIONAL PHOTO HELPERS ----------
   const handleListingPhotoClick = () => {
     // use slot 0 as the hero listing photo
@@ -552,104 +561,353 @@ export default function IntakePage() {
   // ---------- RENDER ----------
   return (
     <div
-      className="min-h-screen px-4 py-4 text-slate-100"
       style={{
+        minHeight: "100vh",
         background:
           "radial-gradient(circle at top, #0f172a 0, #020617 45%, #000000 100%)",
+        color: "#e5e7eb",
+        padding: "16px",
+        fontFamily:
+          "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
       {/* HEADER */}
-      <div className="mx-auto mb-4 max-w-5xl rounded-2xl border border-amber-400/40 bg-gradient-to-br from-white to-slate-50 px-6 py-4 shadow-[0_8px_22px_rgba(15,23,42,0.10),0_0_14px_rgba(56,189,248,0.16)]">
-        <div className="flex items-center justify-between gap-6">
-          {/* Logo + Title */}
-          <div className="flex flex-1 items-center gap-5 min-w-0">
+      <div
+        style={{
+          maxWidth: "1180px",
+          margin: "0 auto 16px auto",
+          padding: "18px 24px 16px 24px",
+          borderRadius: "20px",
+          border: "1px solid rgba(212,175,55,0.35)", // soft gold edge
+          background: "linear-gradient(135deg, #ffffff, #f9fafb)",
+          boxShadow:
+            "0 8px 22px rgba(15,23,42,0.10), 0 0 14px rgba(56,189,248,0.16)", // subtle blue glow
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "24px",
+          }}
+        >
+          {/* Logo + Title (luxury left stack) */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "18px",
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            {/* Logo */}
             <img
               src="/emz-loveluxury-logo-horizontal.png"
               alt="EMZLoveLuxury"
-              className="h-16 w-auto"
+              style={{
+                height: "60px",
+                width: "auto",
+                display: "block",
+              }}
             />
-            <div className="flex min-w-0 flex-col justify-center translate-y-[2px]">
-              <h1 className="truncate text-[30px] font-bold tracking-[0.03em] text-slate-900 sm:text-[34px]">
+
+            {/* Title + accent line */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                transform: "translateY(2px)",
+                minWidth: 0,
+              }}
+            >
+              <h1
+                style={{
+                  fontSize: "34px",
+                  fontWeight: 700,
+                  letterSpacing: "0.03em",
+                  color: "#111827",
+                  margin: 0,
+                  lineHeight: 1.1,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
                 EMZLove Intake{" "}
-                <span className="font-normal text-slate-900"> — </span>
-                <span className="text-xl font-medium tracking-[0.03em] text-slate-700">
+                <span
+                  style={{
+                    fontWeight: 400,
+                    color: "#111827",
+                  }}
+                >
+                  —{" "}
+                </span>
+                <span
+                  style={{
+                    fontSize: "24px",
+                    fontWeight: 500,
+                    letterSpacing: "0.03em",
+                    color: "#374151",
+                  }}
+                >
                   Cataloging and Intake System
                 </span>
               </h1>
-              <div className="mt-1 h-0.5 w-full max-w-xs rounded-full bg-gradient-to-r from-amber-400 to-transparent" />
+
+              {/* Gold accent underline */}
+              <div
+                style={{
+                  height: "2px",
+                  width: "100%",
+                  maxWidth: "420px",
+                  background:
+                    "linear-gradient(to right, #d4af37, rgba(212,175,55,0.0))",
+                  marginTop: "6px",
+                  borderRadius: "999px",
+                }}
+              />
             </div>
           </div>
 
-          {/* AI Badge */}
-          <div className="flex shrink-0 items-start justify-end">
+          {/* AI Upgrade Badge */}
+          <div
+            style={{
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "flex-end",
+            }}
+          >
             <button
               type="button"
-              className="rounded-full border border-amber-400 bg-amber-50/90 px-4 py-1 text-[10px] font-semibold text-amber-800 shadow-sm backdrop-blur"
+              style={{
+                fontSize: "10px",
+                padding: "6px 16px",
+                borderRadius: "999px",
+                border: "1px solid #d4af37",
+                background: "rgba(255,251,235,0.9)",
+                color: "#7a5f1a",
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+                backdropFilter: "blur(3px)",
+              }}
             >
               Powered by EMZLoveLuxury AI
             </button>
           </div>
         </div>
 
-        {/* Messages */}
+        {/* Error / success messages */}
         {errorMsg && (
-          <p className="mt-2 text-xs text-red-700">{errorMsg}</p>
+          <p
+            style={{
+              fontSize: "12px",
+              color: "#b91c1c",
+              marginTop: "8px",
+              textAlign: "left",
+            }}
+          >
+            {errorMsg}
+          </p>
         )}
         {successMsg && (
-          <p className="mt-1 text-xs text-green-700">{successMsg}</p>
+          <p
+            style={{
+              fontSize: "12px",
+              color: "#166534",
+              marginTop: "6px",
+              textAlign: "left",
+            }}
+          >
+            {successMsg}
+          </p>
         )}
 
-        <div className="mt-2 border-t border-slate-200" />
+        {/* Divider line under header */}
+        <div
+          style={{
+            marginTop: "10px",
+            borderTop: "1px solid #e5e7eb",
+          }}
+        />
       </div>
 
-      {/* MAIN GRID */}
-      <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[420px,minmax(0,1fr)]">
-        {/* LEFT COLUMN */}
-        <section className="max-w-[420px] rounded-2xl border border-blue-900/90 bg-slate-950/95 p-3 shadow-[0_0_25px_rgba(37,99,235,0.3)]">
+      {/* MAIN 2-COLUMN GRID */}
+      <div
+        style={{
+          maxWidth: "1180px",
+          margin: "0 auto",
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 420px) minmax(0, 1fr)",
+          gap: "16px",
+          alignItems: "flex-start",
+        }}
+      >
+        {/* LEFT COLUMN – Photos + Currency + Cost + Condition + AI Button */}
+        <section
+          style={{
+            background: "rgba(15,23,42,0.96)",
+            borderRadius: "16px",
+            border: "1px solid rgba(30,64,175,0.9)",
+            padding: "12px",
+            boxShadow: "0 0 25px rgba(37,99,235,0.3)",
+            width: "100%",
+            maxWidth: "420px",
+          }}
+        >
           {/* PHOTOS & CONDITION CARD */}
-          <div className="mb-3 rounded-2xl border border-sky-400/40 bg-gradient-to-br from-slate-900 via-slate-950 to-black p-4 shadow-[0_18px_45px_rgba(15,23,42,0.75)]">
-            {/* Header */}
-            <div className="mb-2 flex items-center justify-between">
+          <div
+            style={{
+              background:
+                "radial-gradient(circle at top left, #0f172a, #020617)",
+              borderRadius: "20px",
+              padding: "16px 16px 18px 16px",
+              border: "1px solid rgba(56,189,248,0.4)",
+              boxShadow: "0 18px 45px rgba(15,23,42,0.75)",
+              width: "100%",
+              marginBottom: "12px",
+            }}
+          >
+            {/* Top title bar */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "8px",
+              }}
+            >
               <div>
-                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-100">
+                <div
+                  style={{
+                    fontSize: "11px",
+                    letterSpacing: "0.16em",
+                    textTransform: "uppercase",
+                    color: "#e5e7eb",
+                  }}
+                >
                   Photos &amp; Condition
                 </div>
-                <div className="mt-0.5 text-[11px] text-slate-400">
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "#9ca3af",
+                    marginTop: "2px",
+                  }}
+                >
                   Listing photo sets identity. Extras show below as thumbnails.
                 </div>
               </div>
             </div>
-            <div className="mb-2 h-px bg-gradient-to-r from-slate-400/80 to-transparent" />
 
-            {/* MAIN LISTING PHOTO */}
-            <div className="mb-3">
+            {/* Thin bar under header */}
+            <div
+              style={{
+                height: "1px",
+                background:
+                  "linear-gradient(to right, rgba(148,163,184,0.8), rgba(15,23,42,0))",
+                marginBottom: "10px",
+              }}
+            />
+
+            {/* MAIN LISTING PHOTO (slot 0) */}
+            <div style={{ marginBottom: "12px" }}>
               <div
                 onClick={handleListingPhotoClick}
-                className="relative aspect-[4/3] w-full cursor-pointer overflow-hidden rounded-2xl bg-gradient-to-br from-amber-200 via-amber-400 to-amber-700 shadow-[0_18px_40px_rgba(0,0,0,0.55)] transition-transform duration-150 hover:-translate-y-0.5 hover:scale-[1.01] hover:shadow-[0_20px_44px_rgba(0,0,0,0.7)]"
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  aspectRatio: "4 / 3",
+                  borderRadius: "18px",
+                  overflow: "hidden",
+                  background:
+                    "linear-gradient(135deg, #f6e3a5 0%, #d4af37 40%, #b68b22 100%)",
+                  boxShadow: "0 18px 40px rgba(0,0,0,0.55)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  transition:
+                    "transform 0.16s ease, box-shadow 0.16s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform =
+                    "translateY(-1px) scale(1.01)";
+                  e.currentTarget.style.boxShadow =
+                    "0 20px 44px rgba(0,0,0,0.70)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "none";
+                  e.currentTarget.style.boxShadow =
+                    "0 18px 40px rgba(0,0,0,0.55)";
+                }}
               >
                 {images[0] && images[0].url ? (
                   <>
                     <img
                       src={images[0].url}
                       alt="Listing photo"
-                      className="h-full w-full object-cover"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
                     />
-                    <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-slate-50">
+                    {/* keep the “update / replace” vibe */}
+                    <span
+                      style={{
+                        position: "absolute",
+                        bottom: "10px",
+                        right: "10px",
+                        fontSize: "10px",
+                        padding: "3px 8px",
+                        borderRadius: "999px",
+                        background: "rgba(0,0,0,0.55)",
+                        color: "#f9fafb",
+                      }}
+                    >
                       Click to update / replace
                     </span>
                   </>
                 ) : (
                   <>
-                    <div className="flex h-full w-full items-center justify-center">
-                      <div className="relative flex aspect-square w-[72%] items-center justify-center rounded-2xl bg-[#f7f3e8] shadow-md">
-                        <img
-                          src="/emz-heart-gold.png"
-                          alt="EMZ placeholder"
-                          className="w-[70%] object-contain opacity-95 drop-shadow-md"
-                        />
-                      </div>
-                    </div>
-                    <span className="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white/90 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-900 shadow-md">
+                    {/* EMZ heart logo on brushed-gold background */}
+                    <img
+                      src="/emz-heart-gold.png"
+                      alt="EMZ placeholder"
+                      style={{
+                        height: "90px",
+                        width: "auto",
+                        opacity: 0.9,
+                        filter:
+                          "drop-shadow(0 4px 8px rgba(0,0,0,0.35))",
+                      }}
+                    />
+
+                    {/* Overlay label */}
+                    <span
+                      style={{
+                        position: "absolute",
+                        bottom: "14px",
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        fontSize: "12px",
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        color: "#111827",
+                        background: "rgba(255,255,255,0.9)",
+                        padding: "4px 12px",
+                        borderRadius: "999px",
+                        boxShadow:
+                          "0 2px 6px rgba(0,0,0,0.28)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       Click to Add Listing Photo
                     </span>
                   </>
@@ -657,25 +915,67 @@ export default function IntakePage() {
               </div>
             </div>
 
-            <div className="mb-2 h-px bg-gradient-to-r from-transparent to-slate-400/70" />
+            {/* Thin bar between main & additional */}
+            <div
+              style={{
+                height: "1px",
+                background:
+                  "linear-gradient(to right, rgba(15,23,42,0), rgba(148,163,184,0.7))",
+                margin: "8px 0 10px 0",
+              }}
+            />
 
             {/* ADDITIONAL PHOTOS HEADER + BUTTON */}
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="whitespace-nowrap text-[11px] uppercase tracking-[0.14em] text-slate-100">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "6px",
+                gap: "8px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "11px",
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "#e5e7eb",
+                  whiteSpace: "nowrap",
+                }}
+              >
                 Additional Photos
               </div>
               <button
                 type="button"
                 onClick={handleAddAdditionalPhotosClick}
-                className="whitespace-nowrap rounded-full border border-sky-400/80 bg-gradient-to-br from-slate-900 to-slate-950 px-2.5 py-1 text-[10px] font-medium text-sky-100"
+                style={{
+                  fontSize: "10px",
+                  padding: "4px 10px",
+                  borderRadius: "999px",
+                  border:
+                    "1px solid rgba(56,189,248,0.8)",
+                  background:
+                    "radial-gradient(circle at top left, #0f172a, #020617)",
+                  color: "#e0f2fe",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
               >
                 Add Additional Photos (up to 9)
               </button>
             </div>
 
-            {/* THUMBNAILS */}
+            {/* THUMBNAIL GRID – only shown when there ARE additional photos */}
             {images.some((img, idx) => idx > 0 && img) && (
-              <div className="flex flex-wrap gap-2">
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                }}
+              >
                 {images.map(
                   (img, idx) =>
                     idx > 0 &&
@@ -683,14 +983,40 @@ export default function IntakePage() {
                       <div
                         key={idx}
                         onClick={() => handleReplaceImage(idx)}
-                        className="relative aspect-[4/3] flex-[0_0_calc((100%-16px)/3)] cursor-pointer overflow-hidden rounded-xl bg-slate-950 shadow-[0_8px_24px_rgba(15,23,42,0.85)]"
+                        style={{
+                          position: "relative",
+                          flex: "0 0 calc((100% - 16px) / 3)", // 3 across
+                          aspectRatio: "4 / 3",
+                          borderRadius: "12px",
+                          overflow: "hidden",
+                          background: "#020617",
+                          cursor: "pointer",
+                          boxShadow:
+                            "0 8px 24px rgba(15,23,42,0.85)",
+                        }}
                       >
                         <img
                           src={img.url}
                           alt={`Additional photo ${idx}`}
-                          className="h-full w-full object-cover"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
                         />
-                        <span className="absolute bottom-1.5 right-1.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] text-slate-50">
+                        <span
+                          style={{
+                            position: "absolute",
+                            bottom: "6px",
+                            right: "6px",
+                            fontSize: "9px",
+                            padding: "2px 6px",
+                            borderRadius: "999px",
+                            background:
+                              "rgba(0,0,0,0.55)",
+                            color: "#f9fafb",
+                          }}
+                        >
                           Click to update / replace
                         </span>
                       </div>
@@ -701,112 +1027,167 @@ export default function IntakePage() {
           </div>
 
           {/* Currency */}
-          <label className="mt-2 mb-1 block text-[11px] text-slate-400">
-            Currency
-          </label>
+          <label style={labelStyle}>Currency</label>
           <select
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
-            className="w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-xs text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-0"
+            style={inputStyle}
           >
             <option value="USD">USD – US Dollar</option>
             <option value="PHP">PHP – Philippine Peso</option>
             <option value="JPY">JPY – Japanese Yen</option>
             <option value="EUR">EUR – Euro</option>
           </select>
-          <p className="mt-[-4px] text-[10px] text-slate-400">
-            Used for your cost and target listing price. Global inventory can
-            normalize to USD later.
+          <p
+            style={{
+              fontSize: "10px",
+              color: "#9ca3af",
+              marginTop: "-4px",
+            }}
+          >
+            Used for your cost and target listing price. Global inventory
+            can normalize to USD later.
           </p>
 
           {/* Cost */}
-          <label className="mt-2 mb-1 block text-[11px] text-slate-400">
+          <label style={labelStyle}>
             Cost (Your Buy-In, {currency})
           </label>
           <input
             type="number"
             value={cost}
             onChange={(e) => setCost(e.target.value)}
+            style={inputStyle}
             placeholder="e.g. 350"
-            className="w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-0"
           />
 
           {/* Condition & notes */}
-          <label className="mt-2 mb-1 block text-[11px] text-slate-400">
-            Condition Grade (required)
-          </label>
+          <label style={labelStyle}>Condition Grade (required)</label>
           <select
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
-            className="w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-xs text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-0"
+            style={inputStyle}
           >
             <option value="">Select grade…</option>
             <option value="N">N – New</option>
-            <option value="A">A – Pristine or Unused Condition</option>
+            <option value="A">
+              A – Pristine or Unused Condition
+            </option>
             <option value="B">
               B – Excellent Preloved with Minor Callouts
             </option>
-            <option value="C">C – Functional With Signs of Usage</option>
+            <option value="C">
+              C – Functional With Signs of Usage
+            </option>
             <option value="D">D – Project</option>
             <option value="U">U – Contemporary Brand</option>
           </select>
-          <p className="mt-[-4px] text-[10px] text-amber-300">
+          <p
+            style={{
+              fontSize: "10px",
+              color: "#facc15",
+              marginTop: "-4px",
+            }}
+          >
             EMZCurator will not run until you choose a grade.
           </p>
 
-          <label className="mt-2 mb-1 block text-[11px] text-slate-400">
-            Grading Notes (user only)
-          </label>
+          <label style={labelStyle}>Grading Notes (user only)</label>
           <textarea
             value={gradingNotes}
             onChange={(e) => setGradingNotes(e.target.value)}
+            style={{ ...inputStyle, minHeight: "70px" }}
             placeholder="Corner wear, hardware scratches, interior marks, odor notes, etc."
-            className="min-h-[70px] w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-0"
           />
 
-          {/* Run AI */}
+          {/* Run AI button */}
           <button
             type="button"
             onClick={runAI}
             disabled={isAnalyzing}
-            className={`mt-3 w-full rounded-full border px-4 py-2 text-xs font-semibold text-slate-100 shadow-[0_0_25px_rgba(56,189,248,0.35),0_0_3px_rgba(37,99,235,0.9)] ${
-              isAnalyzing
-                ? "cursor-default border-slate-700 bg-slate-900"
-                : "cursor-pointer border-sky-400 bg-indigo-700 hover:bg-indigo-600"
-            }`}
+            style={{
+              marginTop: "10px",
+              width: "100%",
+              padding: "8px 14px",
+              fontSize: "12px",
+              borderRadius: "999px",
+              border: "1px solid #38bdf8",
+              background: isAnalyzing ? "#0f172a" : "#1d4ed8",
+              color: "#e5e7eb",
+              fontWeight: 600,
+              cursor: isAnalyzing ? "default" : "pointer",
+              boxShadow:
+                "0 0 25px rgba(56,189,248,0.35), 0 0 3px rgba(37,99,235,0.9)",
+              textShadow: "0 0 6px rgba(15,23,42,0.9)",
+            }}
           >
             {isAnalyzing ? "EMZCurator Thinking…" : "Run EMZCurator AI"}
           </button>
-          <p className="mt-1 text-[10px] text-slate-400">
-            Uses photos + your cost and grade to build a complete description
-            you can print and read live.
+          <p
+            style={{
+              fontSize: "10px",
+              color: "#9ca3af",
+              marginTop: "6px",
+            }}
+          >
+            Uses photos + your cost and grade to build a complete
+            description you can print and read live.
           </p>
         </section>
 
-        {/* RIGHT COLUMN */}
-        <section className="flex flex-col gap-3">
-          {/* Item number + Save */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400">Item #</span>
+        {/* RIGHT COLUMN – Item # + EMZCurator Description + Pricing + Included Items */}
+        <section
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+          }}
+        >
+          {/* Item number + Save + Ready to Sell */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                Item #
+              </span>
               <input
                 type="text"
                 value={itemNumber}
                 onChange={(e) => setItemNumber(e.target.value)}
                 placeholder="Auto-generated on first photo"
-                className="min-w-[190px] rounded-full border border-slate-800 bg-slate-950 px-3 py-1 text-center text-[11px] text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-0"
+                style={{
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  borderRadius: "999px",
+                  border: "1px solid #1f2937",
+                  background: "#020617",
+                  color: "#e5e7eb",
+                  minWidth: "190px",
+                  textAlign: "center",
+                }}
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <button
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving}
-                className={`rounded-full px-4 py-2 text-xs font-semibold ${
-                  isSaving
-                    ? "cursor-default border border-amber-300 bg-amber-300 text-slate-900"
-                    : "cursor-pointer border border-amber-300 bg-amber-300 text-slate-900 hover:bg-amber-200"
-                }`}
+                style={{
+                  padding: "8px 14px",
+                  fontSize: "12px",
+                  borderRadius: "999px",
+                  border: "1px solid #facc15",
+                  background: "#facc15",
+                  color: "#020617",
+                  fontWeight: 600,
+                  cursor: isSaving ? "default" : "pointer",
+                }}
               >
                 {isSaving
                   ? "Saving…"
@@ -814,32 +1195,81 @@ export default function IntakePage() {
                   ? "Save & Mark Ready to Sell"
                   : "Save to Inventory"}
               </button>
-              <label className="flex items-center gap-1.5 text-[11px] text-slate-100">
+              <label
+                style={{
+                  fontSize: "11px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  color: "#e5e7eb",
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={listForSale}
                   onChange={(e) => setListForSale(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-slate-500 bg-slate-900 text-amber-300 focus:ring-0"
                 />
                 Ready to Sell
               </label>
             </div>
           </div>
 
-          {/* EMZCurator Description */}
-          <div className="rounded-2xl border border-sky-400/90 bg-gradient-to-b from-sky-800/40 via-slate-950 to-slate-950 px-3 py-3 shadow-[0_0_30px_rgba(56,189,248,0.45),0_0_6px_rgba(250,204,21,0.4)]">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-[12px] font-semibold uppercase tracking-[0.16em] text-sky-100">
+          {/* EMZCurator Description Hero (Print Card) */}
+          <div
+            style={{
+              background:
+                "radial-gradient(circle at top, rgba(56,189,248,0.4), rgba(15,23,42,1))",
+              borderRadius: "16px",
+              border: "1px solid rgba(56,189,248,0.9)",
+              padding: "12px",
+              boxShadow:
+                "0 0 30px rgba(56,189,248,0.45), 0 0 6px rgba(250,204,21,0.4)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "4px",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.16em",
+                  color: "#e0f2fe",
+                }}
+              >
                 EMZCurator Description
               </h2>
-              <div className="flex items-center gap-2">
-                <span className="rounded-full border border-amber-300/60 bg-slate-900/80 px-2 py-0.5 text-[10px] text-amber-300">
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    borderRadius: "999px",
+                    padding: "2px 8px",
+                    border: "1px solid rgba(250,204,21,0.6)",
+                    color: "#facc15",
+                    background: "rgba(15,23,42,0.85)",
+                  }}
+                >
                   Print Card Text
                 </span>
                 <button
                   type="button"
                   onClick={handlePrintCard}
-                  className="rounded-full border border-sky-400/90 bg-slate-900/90 px-3 py-1 text-[10px] text-sky-100 hover:bg-slate-800"
+                  style={{
+                    fontSize: "10px",
+                    padding: "4px 10px",
+                    borderRadius: "999px",
+                    border: "1px solid rgba(56,189,248,0.9)",
+                    background: "rgba(15,23,42,0.9)",
+                    color: "#e0f2fe",
+                    cursor: "pointer",
+                  }}
                 >
                   Print Card
                 </button>
@@ -850,65 +1280,121 @@ export default function IntakePage() {
               value={curatorNarrative}
               onChange={(e) => setCuratorNarrative(e.target.value)}
               rows={12}
-              className="w-full resize-none overflow-hidden rounded-md border border-slate-800 bg-slate-950/95 px-2 py-1 text-[11px] leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-0"
-              placeholder="When you run EMZCurator AI, a complete description appears here: item number, identity, measurements, features, market note, value range, and sales-forward description — ready to print or read live."
+              style={{
+                ...inputStyle,
+                fontSize: "11px",
+                lineHeight: 1.45,
+                background: "rgba(15,23,42,0.96)",
+                borderColor: "#1e293b",
+                color: "#e5e7eb",
+                resize: "none",
+                overflow: "hidden",
+              }}
+              placeholder={
+                "When you run EMZCurator AI, a complete description appears here: item number, identity, measurements, features, market note, value range, and sales-forward description — ready to print or read live."
+              }
             />
           </div>
 
-          {/* Pricing & Status */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/95 px-3 py-3">
-            <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-sky-300">
-              Pricing &amp; Status
+          {/* Pricing & Status Card (Listing Price + AI Preview) */}
+          <div
+            style={{
+              background: "rgba(15,23,42,0.96)",
+              borderRadius: "16px",
+              border: "1px solid #1f2937",
+              padding: "12px",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "12px",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.14em",
+                color: "#93c5fd",
+                marginBottom: "8px",
+              }}
+            >
+              Pricing & Status
             </h2>
 
-            <label className="mb-1 block text-[11px] text-slate-400">
+            <label style={labelStyle}>
               Target Listing Price ({currency})
             </label>
             <input
               type="number"
               value={listingPrice}
               onChange={(e) => setListingPrice(e.target.value)}
+              style={inputStyle}
               placeholder="EMZCurator suggestion or your own"
-              className="w-full rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-0"
             />
 
-            <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">
-              <strong className="text-[12px]">AI Pricing Preview</strong>
-              <div className="mt-1 space-y-0.5 text-[11px] text-slate-400">
-                {pricingPreview.retail_price && (
-                  <p>
-                    Retail (approx., likely USD):{" "}
-                    {pricingPreview.retail_price}
-                  </p>
-                )}
-                {pricingPreview.comp_low && (
-                  <p>Comp Low: {pricingPreview.comp_low}</p>
-                )}
-                {pricingPreview.comp_high && (
-                  <p>Comp High: {pricingPreview.comp_high}</p>
-                )}
-                {pricingPreview.recommended_listing && (
-                  <p>
-                    Recommended Listing:{" "}
-                    {pricingPreview.recommended_listing}
-                  </p>
-                )}
-                {pricingPreview.whatnot_start && (
-                  <p>
-                    Suggested Whatnot Start:{" "}
-                    {pricingPreview.whatnot_start}
-                  </p>
-                )}
-              </div>
+            <div
+              style={{
+                marginTop: "10px",
+                padding: "10px",
+                borderRadius: "10px",
+                border: "1px solid #1e293b",
+                background: "#020617",
+              }}
+            >
+              <strong style={{ fontSize: "12px" }}>AI Pricing Preview</strong>
+              {pricingPreview.retail_price && (
+                <p style={previewStyle}>
+                  Retail (approx., likely USD): {pricingPreview.retail_price}
+                </p>
+              )}
+              {pricingPreview.comp_low && (
+                <p style={previewStyle}>
+                  Comp Low: {pricingPreview.comp_low}
+                </p>
+              )}
+              {pricingPreview.comp_high && (
+                <p style={previewStyle}>
+                  Comp High: {pricingPreview.comp_high}
+                </p>
+              )}
+              {pricingPreview.recommended_listing && (
+                <p style={previewStyle}>
+                  Recommended Listing: {pricingPreview.recommended_listing}
+                </p>
+              )}
+              {pricingPreview.whatnot_start && (
+                <p style={previewStyle}>
+                  Suggested Whatnot Start: {pricingPreview.whatnot_start}
+                </p>
+              )}
             </div>
           </div>
 
           {/* Included Items */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/95 px-3 py-3">
-            <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-sky-300">
+          <div
+            style={{
+              background: "rgba(15,23,42,0.96)",
+              borderRadius: "16px",
+              border: "1px solid #1f2937",
+              padding: "12px",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "12px",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.14em",
+                color: "#93c5fd",
+                marginBottom: "8px",
+              }}
+            >
               Included Items
             </h2>
-            <p className="mb-1 text-[11px] text-slate-400">
+            <p
+              style={{
+                fontSize: "11px",
+                color: "#9ca3af",
+                marginBottom: "4px",
+              }}
+            >
               One per line: dust bag, strap, box, authenticity card, inserts,
               etc.
             </p>
@@ -916,43 +1402,116 @@ export default function IntakePage() {
               ref={includedRef}
               value={includedText}
               onChange={(e) => setIncludedText(e.target.value)}
+              style={{
+                ...inputStyle,
+                minHeight: "80px",
+                resize: "none",
+                overflow: "hidden",
+              }}
               placeholder={"Dust bag\nCrossbody strap\nBox"}
-              className="min-h-[80px] w-full resize-none overflow-hidden rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-0"
             />
           </div>
         </section>
       </div>
 
       {/* INVENTORY SUMMARY */}
-      <div className="mx-auto mt-5 max-w-5xl rounded-2xl border border-slate-800 bg-slate-950/95 px-3 py-3">
-        <h3 className="mb-2 text-sm font-semibold">My Latest Intakes</h3>
+      <div
+        style={{
+          maxWidth: "1180px",
+          margin: "20px auto 0 auto",
+          padding: "12px",
+          borderRadius: "16px",
+          border: "1px solid #1f2937",
+          background: "rgba(15,23,42,0.96)",
+        }}
+      >
+        <h3 style={{ fontSize: "14px", fontWeight: 600, marginBottom: "8px" }}>
+          My Latest Intakes
+        </h3>
         {userInventory.length === 0 ? (
-          <p className="text-xs text-slate-400">
+          <p style={{ fontSize: "12px", color: "#9ca3af" }}>
             No items yet. Save an intake to see it here.
           </p>
         ) : (
-          <div className="max-h-[220px] overflow-y-auto rounded-lg border border-slate-900">
-            <table className="min-w-full border-collapse text-[11px]">
+          <div
+            style={{
+              maxHeight: "220px",
+              overflowY: "auto",
+              borderRadius: "10px",
+              border: "1px solid #111827",
+            }}
+          >
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: "11px",
+              }}
+            >
               <thead>
-                <tr className="border-b border-slate-900 bg-slate-950">
-                  <th className="px-2 py-1 text-left font-semibold">SKU</th>
-                  <th className="px-2 py-1 text-left font-semibold">Brand</th>
-                  <th className="px-2 py-1 text-left font-semibold">Model</th>
-                  <th className="px-2 py-1 text-left font-semibold">Status</th>
+                <tr
+                  style={{
+                    background: "#020617",
+                    borderBottom: "1px solid #111827",
+                  }}
+                >
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 8px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    SKU
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 8px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Brand
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 8px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Model
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 8px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Status
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {userInventory.map((item) => (
                   <tr
                     key={item.id}
-                    className="border-b border-slate-950 bg-slate-950"
+                    style={{
+                      borderBottom: "1px solid #020617",
+                      background: "#020617",
+                    }}
                   >
-                    <td className="px-2 py-1">
+                    <td style={{ padding: "4px 8px" }}>
                       {item.item_number || item.sku || "—"}
                     </td>
-                    <td className="px-2 py-1">{item.brand || "—"}</td>
-                    <td className="px-2 py-1">{item.model || "—"}</td>
-                    <td className="px-2 py-1">
+                    <td style={{ padding: "4px 8px" }}>
+                      {item.brand || "—"}
+                    </td>
+                    <td style={{ padding: "4px 8px" }}>
+                      {item.model || "—"}
+                    </td>
+                    <td style={{ padding: "4px 8px" }}>
                       {item.status || "intake"}
                     </td>
                   </tr>
@@ -961,7 +1520,14 @@ export default function IntakePage() {
             </table>
           </div>
         )}
-        <p className="mt-2 text-[11px] text-slate-400">
+
+        <p
+          style={{
+            marginTop: "8px",
+            fontSize: "11px",
+            color: "#9ca3af",
+          }}
+        >
           Global inventory: {globalInventory.length} items
         </p>
       </div>
@@ -1115,3 +1681,29 @@ function buildSearchKeywords({ identity, narrative, includedItems }) {
 
   return Array.from(keywords);
 }
+
+// ---------- STYLE HELPERS ----------
+const inputStyle = {
+  width: "100%",
+  padding: "6px 8px",
+  fontSize: "12px",
+  borderRadius: "6px",
+  border: "1px solid #1f2937",
+  marginBottom: "8px",
+  background: "#020617",
+  color: "#e5e7eb",
+};
+
+const labelStyle = {
+  fontSize: "11px",
+  marginTop: "8px",
+  marginBottom: "4px",
+  display: "block",
+  color: "#9ca3af",
+};
+
+const previewStyle = {
+  fontSize: "11px",
+  margin: "2px 0",
+  color: "#9ca3af",
+};
