@@ -759,6 +759,7 @@ export default function IntakePage() {
             border: "1px solid rgba(30,64,175,0.9)",
             padding: "12px",
             boxShadow: "0 0 25px rgba(37,99,235,0.3)",
+            maxWidth: "384px",
           }}
         >
           {/* PHOTOS & CONDITION CARD */}
@@ -770,7 +771,7 @@ export default function IntakePage() {
               padding: "16px 16px 18px 16px",
               border: "1px solid rgba(56,189,248,0.4)",
               boxShadow: "0 18px 45px rgba(15,23,42,0.75)",
-              maxWidth: "360px", // defines the left column width
+              width: "100%", // defines the left column width
               marginBottom: "12px",
             }}
           >
