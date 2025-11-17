@@ -667,6 +667,16 @@ export default function IntakePage() {
                     backgroundColor: "#020617",
                     cursor: "pointer",
                     overflow: "hidden",
+                    transition: "transform 120ms ease, box-shadow 120ms ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-1px)";
+                    e.currentTarget.style.boxShadow =
+                      "0 0 16px rgba(56,189,248,0.45)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "none";
+                    e.currentTarget.style.boxShadow = "none";
                   }}
                 >
                   {!isFilled && (
@@ -769,6 +779,7 @@ export default function IntakePage() {
 
           {/* Run AI button */}
           <button
+            type="button"
             onClick={runAI}
             disabled={isAnalyzing}
             style={{
@@ -799,7 +810,6 @@ export default function IntakePage() {
         <section
           style={{
             display: "flex",
-            flexDirection: "flex-column",
             flexDirection: "column",
             gap: "12px",
           }}
@@ -836,6 +846,7 @@ export default function IntakePage() {
             </div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <button
+                type="button"
                 onClick={handleSave}
                 disabled={isSaving}
                 style={{
