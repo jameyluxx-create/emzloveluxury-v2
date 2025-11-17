@@ -557,46 +557,131 @@ export default function IntakePage() {
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      {/* HEADER */}
+            {/* HEADER */}
       <div
         style={{
           maxWidth: "1180px",
           margin: "0 auto 16px auto",
-          padding: "10px 14px",
+          padding: "16px 20px 12px 20px",
           borderRadius: "16px",
-          border: "1px solid rgba(56,189,248,0.6)",
-          background:
-            "linear-gradient(135deg, rgba(15,23,42,0.95), rgba(8,47,73,0.95))",
-          boxShadow:
-            "0 0 35px rgba(56,189,248,0.35), 0 0 6px rgba(250,204,21,0.3)",
+          border: "1px solid #e5e7eb",
+          background: "#ffffff",
+          boxShadow: "0 8px 20px rgba(15,23,42,0.08)",
         }}
       >
-        <h1
+        <div
           style={{
-            fontSize: "18px",
-            fontWeight: 700,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: "#e0f2fe",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
           }}
         >
-          EMZLoveLuxury · Intake + EMZCurator AI
-        </h1>
-        <p style={{ fontSize: "12px", color: "#bfdbfe", marginTop: "4px" }}>
-          Photos + your cost & grade on the left. EMZCurator Description and
-          live print card on the right.
-        </p>
+          {/* Logo + Title */}
+          <div
+            style={{
+              flex: 1,
+              textAlign: "center",
+            }}
+          >
+            <img
+              src="/emz-loveluxury-logo-horizontal.png"
+              alt="EMZLoveLuxury"
+              style={{
+                maxWidth: "220px", // Option C: small, elegant logo
+                height: "auto",
+                display: "block",
+                margin: "0 auto 4px auto",
+              }}
+            />
+            <div>
+              <h1
+                style={{
+                  fontSize: "18px",
+                  fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                  color: "#111827",
+                }}
+              >
+                EMZLove Intake
+              </h1>
+              <p
+                style={{
+                  fontSize: "12px",
+                  color: "#4b5563",
+                  marginTop: "2px",
+                }}
+              >
+                Cataloging and Intake System
+              </p>
+            </div>
+          </div>
+
+          {/* AI Upgrade Badge */}
+          <div
+            style={{
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "flex-end",
+            }}
+          >
+            <button
+              type="button"
+              // later this will open an "upgrade" / info modal
+              style={{
+                fontSize: "10px",
+                padding: "6px 12px",
+                borderRadius: "999px",
+                border: "1px solid #eab308",
+                background: "#fffbeb",
+                color: "#92400e",
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Powered by EMZLoveLuxury AI
+            </button>
+          </div>
+        </div>
+
+        {/* Error / success messages */}
         {errorMsg && (
-          <p style={{ fontSize: "12px", color: "#fecaca", marginTop: "4px" }}>
+          <p
+            style={{
+              fontSize: "12px",
+              color: "#b91c1c",
+              marginTop: "6px",
+              textAlign: "center",
+            }}
+          >
             {errorMsg}
           </p>
         )}
         {successMsg && (
-          <p style={{ fontSize: "12px", color: "#bbf7d0", marginTop: "4px" }}>
+          <p
+            style={{
+              fontSize: "12px",
+              color: "#166534",
+              marginTop: "4px",
+              textAlign: "center",
+            }}
+          >
             {successMsg}
           </p>
         )}
+
+        {/* Divider line under header */}
+        <div
+          style={{
+            marginTop: "8px",
+            borderTop: "1px solid #e5e7eb",
+          }}
+        />
       </div>
+
 
       {/* MAIN 2-COLUMN GRID */}
       <div
