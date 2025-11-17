@@ -600,7 +600,7 @@ export default function IntakePage() {
       {/* Title (75% of logo size) */}
       <h1
         style={{
-          fontSize: "42px", // about 75% of logo height visually
+          fontSize: "36px", // about 75% of logo height visually
           fontWeight: 700,
           letterSpacing: "0.02em",
           color: "#111827",
@@ -612,7 +612,7 @@ export default function IntakePage() {
         EMZLove Intake —{" "}
         <span
           style={{
-            fontSize: "32px",
+            fontSize: "28px",
             fontWeight: 500,
             color: "#374151",
           }}
