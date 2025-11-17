@@ -588,7 +588,7 @@ export default function IntakePage() {
     >
       {/* Logo */}
       <img
-        src="/emzhorizontalstacklogo.png"
+        src="/EMZhorizontalstacklogo.png"
         alt="EMZLoveLuxury"
         style={{
           height: "56px", // logo size
