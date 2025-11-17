@@ -754,96 +754,228 @@ export default function IntakePage() {
               marginBottom: "8px",
             }}
           >
-            Photos & Condition
-          </h2>
-          <p style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "8px" }}>
-            Load your best angles, pick your working currency, set cost and
-            grade. EMZCurator uses these with the photos for valuation.
-          </p>
+{/* PHOTOS & CONDITION CARD */}
+<div
+  style={{
+    background: "radial-gradient(circle at top left, #0f172a, #020617)",
+    borderRadius: "20px",
+    padding: "16px 16px 18px 16px",
+    border: "1px solid rgba(56,189,248,0.4)",
+    boxShadow: "0 18px 45px rgba(15,23,42,0.75)",
+    maxWidth: "360px", // defines the left column width
+  }}
+>
+  {/* Top title bar */}
+  <div
+    style={{
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: "8px",
+    }}
+  >
+    <div>
+      <div
+        style={{
+          fontSize: "11px",
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: "#e5e7eb",
+        }}
+      >
+        Photos &amp; Condition
+      </div>
+      <div
+        style={{
+          fontSize: "11px",
+          color: "#9ca3af",
+          marginTop: "2px",
+        }}
+      >
+        Listing photo sets identity. Extras show below as thumbnails.
+      </div>
+    </div>
+  </div>
 
-          {/* Photo grid (6 slots) */}
-          <div
+  {/* Thin bar under header */}
+  <div
+    style={{
+      height: "1px",
+      background:
+        "linear-gradient(to right, rgba(148,163,184,0.8), rgba(15,23,42,0))",
+      marginBottom: "10px",
+    }}
+  />
+
+  {/* MAIN LISTING PHOTO */}
+  <div style={{ marginBottom: "12px" }}>
+    <div
+      onClick={handleListingPhotoClick} // <-- hook to your existing main-photo handler
+      style={{
+        position: "relative",
+        width: "100%",
+        aspectRatio: "4 / 3", // keeps it stable
+        borderRadius: "18px",
+        overflow: "hidden",
+        background:
+          "linear-gradient(135deg, #f6e3a5 0%, #d4af37 40%, #b68b22 100%)",
+        boxShadow: "0 18px 40px rgba(0,0,0,0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        transition: "transform 0.16s ease, box-shadow 0.16s ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-1px) scale(1.01)";
+        e.currentTarget.style.boxShadow =
+          "0 20px 44px rgba(0,0,0,0.70)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "none";
+        e.currentTarget.style.boxShadow =
+          "0 18px 40px rgba(0,0,0,0.55)";
+      }}
+    >
+      {listingPhotoUrl ? (
+        // When a main photo is already uploaded
+        <img
+          src={listingPhotoUrl}
+          alt="Listing photo"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
+        />
+      ) : (
+        <>
+          {/* EMZ heart logo on brushed-gold background */}
+          <img
+            src="/emz-heart-gold.png" // small transparent EMZ heart asset
+            alt="EMZ placeholder"
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: "8px",
-              marginBottom: "10px",
+              height: "90px",
+              width: "auto",
+              opacity: 0.9,
+              filter: "drop-shadow(0 4px 8px rgba(0,0,0,0.35))",
+            }}
+          />
+
+          {/* Overlay label */}
+          <span
+            style={{
+              position: "absolute",
+              bottom: "14px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              fontSize: "12px",
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: "#111827",
+              background: "rgba(255,255,255,0.9)",
+              padding: "4px 12px",
+              borderRadius: "999px",
+              boxShadow: "0 2px 6px rgba(0,0,0,0.28)",
+              whiteSpace: "nowrap",
             }}
           >
-            {placeholderImages.map((src, idx) => {
-              const img = images[idx];
-              const isFilled = !!img;
-              return (
-                <div
-                  key={idx}
-                  onClick={() => handleReplaceImage(idx)}
-                  style={{
-                    position: "relative",
-                    height: idx === 0 ? "170px" : "140px",
-                    borderRadius: "12px",
-                    border: isFilled
-                      ? "1px solid #38bdf8"
-                      : "1px solid #374151",
-                    backgroundImage: isFilled
-                      ? `url(${img.url})`
-                      : `url(${src})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                    backgroundColor: "#020617",
-                    cursor: "pointer",
-                    overflow: "hidden",
-                    transition: "transform 120ms ease, box-shadow 120ms ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-1px)";
-                    e.currentTarget.style.boxShadow =
-                      "0 0 16px rgba(56,189,248,0.45)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "none";
-                    e.currentTarget.style.boxShadow = "none";
-                  }}
-                >
-                  {!isFilled && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "11px",
-                        color: "#9ca3af",
-                        backdropFilter: "blur(2px)",
-                        background:
-                          "linear-gradient(to top, rgba(15,23,42,0.9), rgba(15,23,42,0.4))",
-                      }}
-                    >
-                      Click to Add
-                    </div>
-                  )}
-                  {isFilled && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        padding: "4px 6px",
-                        fontSize: "10px",
-                        color: "#e5e7eb",
-                        background:
-                          "linear-gradient(to top, rgba(15,23,42,0.9), transparent)",
-                      }}
-                    >
-                      {img.name || "Uploaded image"}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+            Click to Add Listing Photo
+          </span>
+        </>
+      )}
+    </div>
+  </div>
 
+  {/* Thin bar between main & additional */}
+  <div
+    style={{
+      height: "1px",
+      background:
+        "linear-gradient(to right, rgba(15,23,42,0), rgba(148,163,184,0.7))",
+      margin: "8px 0 10px 0",
+    }}
+  />
+
+  {/* ADDITIONAL PHOTOS HEADER + BUTTON */}
+  <div
+    style={{
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: "6px",
+      gap: "8px",
+    }}
+  >
+    <div
+      style={{
+        fontSize: "11px",
+        letterSpacing: "0.14em",
+        textTransform: "uppercase",
+        color: "#e5e7eb",
+        whiteSpace: "nowrap",
+      }}
+    >
+      Additional Photos
+    </div>
+    <button
+      type="button"
+      onClick={handleAddAdditionalPhotosClick} // <-- your existing additional-photos trigger
+      style={{
+        fontSize: "10px",
+        padding: "4px 10px",
+        borderRadius: "999px",
+        border: "1px solid rgba(56,189,248,0.8)",
+        background:
+          "radial-gradient(circle at top left, #0f172a, #020617)",
+        color: "#e0f2fe",
+        fontWeight: 500,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+    >
+      Add Additional Photos (up to 9)
+    </button>
+  </div>
+
+  {/* THUMBNAIL GRID – only shown when there ARE additional photos */}
+  {additionalPhotoUrls && additionalPhotoUrls.length > 0 && (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "8px",
+      }}
+    >
+      {additionalPhotoUrls.map((url, index) => (
+        <div
+          key={index}
+          onClick={() => handleAdditionalThumbClick(index)} // <-- hook to your replace/update logic
+          style={{
+            position: "relative",
+            flex: "0 0 calc((100% - 16px) / 3)", // 3 across, 2 gaps of 8px -> each is 1/3 of main width
+            aspectRatio: "4 / 3",
+            borderRadius: "12px",
+            overflow: "hidden",
+            background: "#020617",
+            cursor: "pointer",
+            boxShadow: "0 8px 24px rgba(15,23,42,0.85)",
+          }}
+        >
+          <img
+            src={url}
+            alt={`Additional photo ${index + 1}`}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  )}
+</div>
           {/* Currency */}
           <label style={labelStyle}>Currency</label>
           <select
