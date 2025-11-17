@@ -135,8 +135,8 @@ export default function IntakePage() {
   // Listing controls
   const [listForSale, setListForSale] = useState(false);
 
-  // Photo grid (6 slots)
-  const [images, setImages] = useState(Array(6).fill(null));
+  // Photo grid (10 slots: [0] = main listing photo, 1–9 = additional)
+  const [images, setImages] = useState(Array(10).fill(null));
 
   // Flags
   const [isSaving, setIsSaving] = useState(false);
@@ -248,6 +248,23 @@ export default function IntakePage() {
     };
 
     input.click();
+  };
+  // ---------- MAIN vs ADDITIONAL PHOTO HELPERS ----------
+  const handleListingPhotoClick = () => {
+    // use slot 0 as the hero listing photo
+    handleReplaceImage(0);
+  };
+
+  const handleAddAdditionalPhotosClick = () => {
+    // find first empty slot from 1–9
+    const nextSlot = images.findIndex((img, idx) => idx > 0 && img === null);
+
+    if (nextSlot === -1) {
+      alert("You’ve reached the maximum of 9 additional photos.");
+      return;
+    }
+
+    handleReplaceImage(nextSlot);
   };
 
   // ---------- PRINT CARD ----------
@@ -537,7 +554,7 @@ export default function IntakePage() {
       sources: [],
     });
     setAiData(null);
-    setImages(Array(6).fill(null));
+    setImages(Array(10).fill(null));
     setListForSale(false);
 
     await loadInventory();
@@ -734,7 +751,7 @@ export default function IntakePage() {
           alignItems: "flex-start",
         }}
       >
-        {/* LEFT COLUMN – Photos + Currency + Cost + Condition + AI Button */}
+               {/* LEFT COLUMN – Photos + Currency + Cost + Condition + AI Button */}
         <section
           style={{
             background: "rgba(15,23,42,0.96)",
@@ -744,238 +761,272 @@ export default function IntakePage() {
             boxShadow: "0 0 25px rgba(37,99,235,0.3)",
           }}
         >
-          <h2
+          {/* PHOTOS & CONDITION CARD */}
+          <div
             style={{
-              fontSize: "12px",
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: "0.14em",
-              color: "#93c5fd",
-              marginBottom: "8px",
+              background:
+                "radial-gradient(circle at top left, #0f172a, #020617)",
+              borderRadius: "20px",
+              padding: "16px 16px 18px 16px",
+              border: "1px solid rgba(56,189,248,0.4)",
+              boxShadow: "0 18px 45px rgba(15,23,42,0.75)",
+              maxWidth: "360px", // defines the left column width
+              marginBottom: "12px",
             }}
           >
-{/* PHOTOS & CONDITION CARD */}
-<div
-  style={{
-    background: "radial-gradient(circle at top left, #0f172a, #020617)",
-    borderRadius: "20px",
-    padding: "16px 16px 18px 16px",
-    border: "1px solid rgba(56,189,248,0.4)",
-    boxShadow: "0 18px 45px rgba(15,23,42,0.75)",
-    maxWidth: "360px", // defines the left column width
-  }}
->
-  {/* Top title bar */}
-  <div
-    style={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: "8px",
-    }}
-  >
-    <div>
-      <div
-        style={{
-          fontSize: "11px",
-          letterSpacing: "0.16em",
-          textTransform: "uppercase",
-          color: "#e5e7eb",
-        }}
-      >
-        Photos &amp; Condition
-      </div>
-      <div
-        style={{
-          fontSize: "11px",
-          color: "#9ca3af",
-          marginTop: "2px",
-        }}
-      >
-        Listing photo sets identity. Extras show below as thumbnails.
-      </div>
-    </div>
-  </div>
+            {/* Top title bar */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "8px",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    letterSpacing: "0.16em",
+                    textTransform: "uppercase",
+                    color: "#e5e7eb",
+                  }}
+                >
+                  Photos &amp; Condition
+                </div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "#9ca3af",
+                    marginTop: "2px",
+                  }}
+                >
+                  Listing photo sets identity. Extras show below as thumbnails.
+                </div>
+              </div>
+            </div>
 
-  {/* Thin bar under header */}
-  <div
-    style={{
-      height: "1px",
-      background:
-        "linear-gradient(to right, rgba(148,163,184,0.8), rgba(15,23,42,0))",
-      marginBottom: "10px",
-    }}
-  />
+            {/* Thin bar under header */}
+            <div
+              style={{
+                height: "1px",
+                background:
+                  "linear-gradient(to right, rgba(148,163,184,0.8), rgba(15,23,42,0))",
+                marginBottom: "10px",
+              }}
+            />
 
-  {/* MAIN LISTING PHOTO */}
-  <div style={{ marginBottom: "12px" }}>
-    <div
-      onClick={handleListingPhotoClick} // <-- hook to your existing main-photo handler
-      style={{
-        position: "relative",
-        width: "100%",
-        aspectRatio: "4 / 3", // keeps it stable
-        borderRadius: "18px",
-        overflow: "hidden",
-        background:
-          "linear-gradient(135deg, #f6e3a5 0%, #d4af37 40%, #b68b22 100%)",
-        boxShadow: "0 18px 40px rgba(0,0,0,0.55)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        cursor: "pointer",
-        transition: "transform 0.16s ease, box-shadow 0.16s ease",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-1px) scale(1.01)";
-        e.currentTarget.style.boxShadow =
-          "0 20px 44px rgba(0,0,0,0.70)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "none";
-        e.currentTarget.style.boxShadow =
-          "0 18px 40px rgba(0,0,0,0.55)";
-      }}
-    >
-      {listingPhotoUrl ? (
-        // When a main photo is already uploaded
-        <img
-          src={listingPhotoUrl}
-          alt="Listing photo"
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-          }}
-        />
-      ) : (
-        <>
-          {/* EMZ heart logo on brushed-gold background */}
-          <img
-            src="/emz-heart-gold.png" // small transparent EMZ heart asset
-            alt="EMZ placeholder"
-            style={{
-              height: "90px",
-              width: "auto",
-              opacity: 0.9,
-              filter: "drop-shadow(0 4px 8px rgba(0,0,0,0.35))",
-            }}
-          />
+            {/* MAIN LISTING PHOTO (slot 0) */}
+            <div style={{ marginBottom: "12px" }}>
+              <div
+                onClick={handleListingPhotoClick}
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  aspectRatio: "4 / 3",
+                  borderRadius: "18px",
+                  overflow: "hidden",
+                  background:
+                    "linear-gradient(135deg, #f6e3a5 0%, #d4af37 40%, #b68b22 100%)",
+                  boxShadow: "0 18px 40px rgba(0,0,0,0.55)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  transition:
+                    "transform 0.16s ease, box-shadow 0.16s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform =
+                    "translateY(-1px) scale(1.01)";
+                  e.currentTarget.style.boxShadow =
+                    "0 20px 44px rgba(0,0,0,0.70)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "none";
+                  e.currentTarget.style.boxShadow =
+                    "0 18px 40px rgba(0,0,0,0.55)";
+                }}
+              >
+                {images[0] && images[0].url ? (
+                  <>
+                    <img
+                      src={images[0].url}
+                      alt="Listing photo"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                    {/* keep the “update / replace” vibe */}
+                    <span
+                      style={{
+                        position: "absolute",
+                        bottom: "10px",
+                        right: "10px",
+                        fontSize: "10px",
+                        padding: "3px 8px",
+                        borderRadius: "999px",
+                        background: "rgba(0,0,0,0.55)",
+                        color: "#f9fafb",
+                      }}
+                    >
+                      Click to update / replace
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    {/* EMZ heart logo on brushed-gold background */}
+                    <img
+                      src="/emz-heart-gold.png"
+                      alt="EMZ placeholder"
+                      style={{
+                        height: "90px",
+                        width: "auto",
+                        opacity: 0.9,
+                        filter:
+                          "drop-shadow(0 4px 8px rgba(0,0,0,0.35))",
+                      }}
+                    />
 
-          {/* Overlay label */}
-          <span
-            style={{
-              position: "absolute",
-              bottom: "14px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              fontSize: "12px",
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-              color: "#111827",
-              background: "rgba(255,255,255,0.9)",
-              padding: "4px 12px",
-              borderRadius: "999px",
-              boxShadow: "0 2px 6px rgba(0,0,0,0.28)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Click to Add Listing Photo
-          </span>
-        </>
-      )}
-    </div>
-  </div>
+                    {/* Overlay label */}
+                    <span
+                      style={{
+                        position: "absolute",
+                        bottom: "14px",
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        fontSize: "12px",
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        color: "#111827",
+                        background: "rgba(255,255,255,0.9)",
+                        padding: "4px 12px",
+                        borderRadius: "999px",
+                        boxShadow:
+                          "0 2px 6px rgba(0,0,0,0.28)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Click to Add Listing Photo
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
 
-  {/* Thin bar between main & additional */}
-  <div
-    style={{
-      height: "1px",
-      background:
-        "linear-gradient(to right, rgba(15,23,42,0), rgba(148,163,184,0.7))",
-      margin: "8px 0 10px 0",
-    }}
-  />
+            {/* Thin bar between main & additional */}
+            <div
+              style={{
+                height: "1px",
+                background:
+                  "linear-gradient(to right, rgba(15,23,42,0), rgba(148,163,184,0.7))",
+                margin: "8px 0 10px 0",
+              }}
+            />
 
-  {/* ADDITIONAL PHOTOS HEADER + BUTTON */}
-  <div
-    style={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: "6px",
-      gap: "8px",
-    }}
-  >
-    <div
-      style={{
-        fontSize: "11px",
-        letterSpacing: "0.14em",
-        textTransform: "uppercase",
-        color: "#e5e7eb",
-        whiteSpace: "nowrap",
-      }}
-    >
-      Additional Photos
-    </div>
-    <button
-      type="button"
-      onClick={handleAddAdditionalPhotosClick} // <-- your existing additional-photos trigger
-      style={{
-        fontSize: "10px",
-        padding: "4px 10px",
-        borderRadius: "999px",
-        border: "1px solid rgba(56,189,248,0.8)",
-        background:
-          "radial-gradient(circle at top left, #0f172a, #020617)",
-        color: "#e0f2fe",
-        fontWeight: 500,
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-      }}
-    >
-      Add Additional Photos (up to 9)
-    </button>
-  </div>
+            {/* ADDITIONAL PHOTOS HEADER + BUTTON */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "6px",
+                gap: "8px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "11px",
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "#e5e7eb",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Additional Photos
+              </div>
+              <button
+                type="button"
+                onClick={handleAddAdditionalPhotosClick}
+                style={{
+                  fontSize: "10px",
+                  padding: "4px 10px",
+                  borderRadius: "999px",
+                  border:
+                    "1px solid rgba(56,189,248,0.8)",
+                  background:
+                    "radial-gradient(circle at top left, #0f172a, #020617)",
+                  color: "#e0f2fe",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Add Additional Photos (up to 9)
+              </button>
+            </div>
 
-  {/* THUMBNAIL GRID – only shown when there ARE additional photos */}
-  {additionalPhotoUrls && additionalPhotoUrls.length > 0 && (
-    <div
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "8px",
-      }}
-    >
-      {additionalPhotoUrls.map((url, index) => (
-        <div
-          key={index}
-          onClick={() => handleAdditionalThumbClick(index)} // <-- hook to your replace/update logic
-          style={{
-            position: "relative",
-            flex: "0 0 calc((100% - 16px) / 3)", // 3 across, 2 gaps of 8px -> each is 1/3 of main width
-            aspectRatio: "4 / 3",
-            borderRadius: "12px",
-            overflow: "hidden",
-            background: "#020617",
-            cursor: "pointer",
-            boxShadow: "0 8px 24px rgba(15,23,42,0.85)",
-          }}
-        >
-          <img
-            src={url}
-            alt={`Additional photo ${index + 1}`}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-            }}
-          />
-        </div>
-      ))}
-    </div>
-  )}
-</div>
+            {/* THUMBNAIL GRID – only shown when there ARE additional photos */}
+            {images.some((img, idx) => idx > 0 && img) && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                }}
+              >
+                {images.map(
+                  (img, idx) =>
+                    idx > 0 &&
+                    img && (
+                      <div
+                        key={idx}
+                        onClick={() => handleReplaceImage(idx)}
+                        style={{
+                          position: "relative",
+                          flex: "0 0 calc((100% - 16px) / 3)", // 3 across
+                          aspectRatio: "4 / 3",
+                          borderRadius: "12px",
+                          overflow: "hidden",
+                          background: "#020617",
+                          cursor: "pointer",
+                          boxShadow:
+                            "0 8px 24px rgba(15,23,42,0.85)",
+                        }}
+                      >
+                        <img
+                          src={img.url}
+                          alt={`Additional photo ${idx}`}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
+                        <span
+                          style={{
+                            position: "absolute",
+                            bottom: "6px",
+                            right: "6px",
+                            fontSize: "9px",
+                            padding: "2px 6px",
+                            borderRadius: "999px",
+                            background:
+                              "rgba(0,0,0,0.55)",
+                            color: "#f9fafb",
+                          }}
+                        >
+                          Click to update / replace
+                        </span>
+                      </div>
+                    )
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Currency */}
           <label style={labelStyle}>Currency</label>
           <select
@@ -988,9 +1039,15 @@ export default function IntakePage() {
             <option value="JPY">JPY – Japanese Yen</option>
             <option value="EUR">EUR – Euro</option>
           </select>
-          <p style={{ fontSize: "10px", color: "#9ca3af", marginTop: "-4px" }}>
-            Used for your cost and target listing price. Global inventory can
-            normalize to USD later.
+          <p
+            style={{
+              fontSize: "10px",
+              color: "#9ca3af",
+              marginTop: "-4px",
+            }}
+          >
+            Used for your cost and target listing price. Global inventory
+            can normalize to USD later.
           </p>
 
           {/* Cost */}
@@ -1014,15 +1071,25 @@ export default function IntakePage() {
           >
             <option value="">Select grade…</option>
             <option value="N">N – New</option>
-            <option value="A">A – Pristine or Unused Condition</option>
+            <option value="A">
+              A – Pristine or Unused Condition
+            </option>
             <option value="B">
               B – Excellent Preloved with Minor Callouts
             </option>
-            <option value="C">C – Functional With Signs of Usage</option>
+            <option value="C">
+              C – Functional With Signs of Usage
+            </option>
             <option value="D">D – Project</option>
             <option value="U">U – Contemporary Brand</option>
           </select>
-          <p style={{ fontSize: "10px", color: "#facc15", marginTop: "-4px" }}>
+          <p
+            style={{
+              fontSize: "10px",
+              color: "#facc15",
+              marginTop: "-4px",
+            }}
+          >
             EMZCurator will not run until you choose a grade.
           </p>
 
@@ -1057,9 +1124,15 @@ export default function IntakePage() {
           >
             {isAnalyzing ? "EMZCurator Thinking…" : "Run EMZCurator AI"}
           </button>
-          <p style={{ fontSize: "10px", color: "#9ca3af", marginTop: "6px" }}>
-            Uses photos + your cost and grade to build a complete description
-            you can print and read live.
+          <p
+            style={{
+              fontSize: "10px",
+              color: "#9ca3af",
+              marginTop: "6px",
+            }}
+          >
+            Uses photos + your cost and grade to build a complete
+            description you can print and read live.
           </p>
         </section>
 
