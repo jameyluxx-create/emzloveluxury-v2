@@ -562,11 +562,12 @@ export default function IntakePage() {
   style={{
     maxWidth: "1180px",
     margin: "0 auto 16px auto",
-    padding: "16px 20px 12px 20px",
-    borderRadius: "16px",
-    border: "1px solid #e5e7eb",
-    background: "#ffffff",
-    boxShadow: "0 8px 20px rgba(15,23,42,0.08)",
+    padding: "18px 24px 16px 24px",
+    borderRadius: "20px",
+    border: "1px solid rgba(212,175,55,0.35)", // soft gold edge
+    background: "linear-gradient(135deg, #ffffff, #f9fafb)",
+    boxShadow:
+      "0 8px 22px rgba(15,23,42,0.10), 0 0 14px rgba(56,189,248,0.16)", // subtle blue glow
   }}
 >
   <div
@@ -577,52 +578,87 @@ export default function IntakePage() {
       gap: "24px",
     }}
   >
-    {/* Logo + Title (left aligned) */}
+    {/* Logo + Title (luxury left stack) */}
     <div
       style={{
         display: "flex",
         alignItems: "center",
-        gap: "16px",
+        gap: "18px",
         flex: 1,
+        minWidth: 0,
       }}
     >
-      {/* Logo */}
+      {/* Logo (your stacked EMZ LOVE LUXURY logo) */}
       <img
-        src="/EMZhorizontalstacklogo.png"
+        src="/emz-loveluxury-logo-horizontal.png" // use your current stacked logo file
         alt="EMZLoveLuxury"
         style={{
-          height: "56px", // logo size
+          height: "60px",
           width: "auto",
           display: "block",
         }}
       />
 
-      {/* Title (75% of logo size) */}
-      <h1
+      {/* Title + accent line */}
+      <div
         style={{
-          fontSize: "36px", // about 75% of logo height visually
-          fontWeight: 700,
-          letterSpacing: "0.02em",
-          color: "#111827",
-          margin: 0,
-          lineHeight: "1",
-          whiteSpace: "nowrap",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          transform: "translateY(2px)", // tiny optical alignment tweak
+          minWidth: 0,
         }}
       >
-        EMZLove Intake —{" "}
-        <span
+        <h1
           style={{
-            fontSize: "28px",
-            fontWeight: 500,
-            color: "#374151",
+            fontSize: "34px",
+            fontWeight: 700,
+            letterSpacing: "0.03em",
+            color: "#111827",
+            margin: 0,
+            lineHeight: 1.1,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
           }}
         >
-          Cataloging and Intake System
-        </span>
-      </h1>
+          EMZLove Intake{" "}
+          <span
+            style={{
+              fontWeight: 400,
+              color: "#111827",
+            }}
+          >
+            —{" "}
+          </span>
+          <span
+            style={{
+              fontSize: "24px",
+              fontWeight: 500,
+              letterSpacing: "0.03em",
+              color: "#374151",
+            }}
+          >
+            Cataloging and Intake System
+          </span>
+        </h1>
+
+        {/* Gold accent underline */}
+        <div
+          style={{
+            height: "2px",
+            width: "100%",
+            maxWidth: "420px",
+            background:
+              "linear-gradient(to right, #d4af37, rgba(212,175,55,0.0))",
+            marginTop: "6px",
+            borderRadius: "999px",
+          }}
+        />
+      </div>
     </div>
 
-    {/* AI Upgrade Badge */}
+    {/* AI Upgrade Badge (luxury chip) */}
     <div
       style={{
         flexShrink: 0,
@@ -635,14 +671,16 @@ export default function IntakePage() {
         type="button"
         style={{
           fontSize: "10px",
-          padding: "6px 12px",
+          padding: "6px 16px",
           borderRadius: "999px",
-          border: "1px solid #eab308",
-          background: "#fffbeb",
-          color: "#92400e",
+          border: "1px solid #d4af37",
+          background: "rgba(255,251,235,0.9)",
+          color: "#7a5f1a",
           fontWeight: 600,
           cursor: "pointer",
           whiteSpace: "nowrap",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+          backdropFilter: "blur(3px)",
         }}
       >
         Powered by EMZLoveLuxury AI
@@ -656,7 +694,7 @@ export default function IntakePage() {
       style={{
         fontSize: "12px",
         color: "#b91c1c",
-        marginTop: "6px",
+        marginTop: "8px",
         textAlign: "left",
       }}
     >
@@ -668,7 +706,7 @@ export default function IntakePage() {
       style={{
         fontSize: "12px",
         color: "#166534",
-        marginTop: "4px",
+        marginTop: "6px",
         textAlign: "left",
       }}
     >
@@ -676,10 +714,10 @@ export default function IntakePage() {
     </p>
   )}
 
-  {/* Divider */}
+  {/* Divider line under header */}
   <div
     style={{
-      marginTop: "8px",
+      marginTop: "10px",
       borderTop: "1px solid #e5e7eb",
     }}
   />
