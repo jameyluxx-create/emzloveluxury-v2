@@ -826,15 +826,16 @@ export default function IntakePage() {
                   aspectRatio: "4 / 3",
                   borderRadius: "18px",
                   overflow: "hidden",
-                  background:
-                    "linear-gradient(135deg, #f6e3a5 0%, #d4af37 40%, #b68b22 100%)", // brushed gold
+                  backgroundImage: "url('/emz-heart-gold.png')",
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  backgroundRepeat: "no-repeat",
                   boxShadow: "0 18px 40px rgba(0,0,0,0.55)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   cursor: "pointer",
-                  transition:
-                    "transform 0.16s ease, box-shadow 0.16s ease",
+                  transition: "transform 0.16s ease, box-shadow 0.16s ease",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform =
@@ -850,6 +851,7 @@ export default function IntakePage() {
               >
                 {images[0] && images[0].url ? (
                   <>
+                    {/* When user has uploaded a listing photo, fill the whole box */}
                     <img
                       src={images[0].url}
                       alt="Listing photo"
@@ -876,21 +878,7 @@ export default function IntakePage() {
                   </>
                 ) : (
                   <>
-                    {/* EMZ heart directly on brushed-gold background */}
-                    <img
-  src="/emz-heart-gold.png"
-  alt="EMZ placeholder"
-  style={{
-    width: "100%",
-    height: "100%",
-    objectFit: "contain",  // shows full design without cropping
-    opacity: 0.98,
-    filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.25))",
-  }}
-/>
-
-
-                    {/* Overlay label */}
+                    {/* EMZ blue-heart-on-gold background is already set via CSS */}
                     <span
                       style={{
                         position: "absolute",
@@ -904,8 +892,7 @@ export default function IntakePage() {
                         background: "rgba(255,255,255,0.9)",
                         padding: "4px 12px",
                         borderRadius: "999px",
-                        boxShadow:
-                          "0 2px 6px rgba(0,0,0,0.28)",
+                        boxShadow: "0 2px 6px rgba(0,0,0,0.28)",
                         whiteSpace: "nowrap",
                       }}
                     >
@@ -1012,8 +999,7 @@ export default function IntakePage() {
                             fontSize: "9px",
                             padding: "2px 6px",
                             borderRadius: "999px",
-                            background:
-                              "rgba(0,0,0,0.55)",
+                            background: "rgba(0,0,0,0.55)",
                             color: "#f9fafb",
                           }}
                         >
@@ -1070,9 +1056,7 @@ export default function IntakePage() {
           >
             <option value="">Select grade…</option>
             <option value="N">N – New</option>
-            <option value="A">
-              A – Pristine or Unused Condition
-            </option>
+            <option value="A">A – Pristine or Unused Condition</option>
             <option value="B">
               B – Excellent Preloved with Minor Callouts
             </option>
