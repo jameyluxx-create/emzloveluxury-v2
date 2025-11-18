@@ -1257,7 +1257,7 @@ export default function IntakePage() {
             gap: "12px",
           }}
         >
-          {/* EMZCurator Description Hero (Print Card) */}
+          {/* EMZCurator Description Hero (Print Card & Tags) */}
           <div
             style={{
               background:
@@ -1314,7 +1314,7 @@ export default function IntakePage() {
                     cursor: "pointer",
                   }}
                 >
-                  Print Card
+                  Print Card &amp; Tags
                 </button>
               </div>
             </div>
@@ -1337,7 +1337,21 @@ export default function IntakePage() {
                 "When you run EMZCurator AI, a complete description appears here: item number, identity, measurements, features, market note, value range, and sales-forward description — ready to print or read live."
               }
             />
+            <p
+              style={{
+                fontSize: "10px",
+                color: "#bfdbfe",
+                marginTop: "6px",
+              }}
+            >
+              When you click <strong>Print Card &amp; Tags</strong>, the system
+              will use this EMZCurator Description (plus your Print Card Text)
+              for the 8.5×11 card, and a bottom strip layout you can cut and
+              fold into a two-sided tag with logo, QR code, barcode, and the
+              item ID.
+            </p>
           </div>
+
 
           {/* Pricing & Status Card (Listing Price + AI Preview) */}
           <div
