@@ -878,19 +878,17 @@ export default function IntakePage() {
                   <>
                     {/* EMZ heart directly on brushed-gold background */}
                     <img
-                      src="/emz-heart-gold.png"
-                      alt="EMZ placeholder"
-                      style={{
-                        width: "38%",
-                        maxWidth: "190px",
-                        height: "auto",
-                        objectFit: "contain",
-                        opacity: 0.96,
-                        filter:
-                          "drop-shadow(0 4px 8px rgba(0,0,0,0.35))",
-                        display: "block",
-                      }}
-                    />
+  src="/emz-heart-gold.png"
+  alt="EMZ placeholder"
+  style={{
+    width: "100%",
+    height: "100%",
+    objectFit: "contain",  // shows full design without cropping
+    opacity: 0.98,
+    filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.25))",
+  }}
+/>
+
 
                     {/* Overlay label */}
                     <span
