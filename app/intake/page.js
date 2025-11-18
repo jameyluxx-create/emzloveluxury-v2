@@ -54,17 +54,62 @@ async function resizeImage(file, maxSize = 1200, quality = 0.8) {
   });
 }
 
-// ---------- helper: generate unique item number ----------
-function generateItemNumber() {
-  const now = new Date();
-  const pad = (n) => n.toString().padStart(2, "0");
-  const yyyy = now.getFullYear();
-  const mm = pad(now.getMonth() + 1);
-  const dd = pad(now.getDate());
-  const hh = pad(now.getHours());
-  const mi = pad(now.getMinutes());
-  const ss = pad(now.getSeconds());
-  return `EMZ-${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+// ---------- NEW EMZLoveLuxury ITEM NUMBER SYSTEM ----------
+
+// brand → 2–4 letter standardized code
+const brandCodes = {
+  "louis vuitton": "LV",
+  "lv": "LV",
+  "chanel": "CH",
+  "gucci": "GU",
+  "prada": "PR",
+  "celine": "CE",
+  "loewe": "LO",
+  "miu miu": "MIU",
+  "coach": "CO",
+};
+
+// Convert brand string → code
+function brandCode(brand) {
+  if (!brand) return "BR";
+  const key = brand.trim().toLowerCase();
+  return brandCodes[key] || brand.substring(0, 3).toUpperCase();
+}
+
+// Convert model string → code
+function modelCode(model) {
+  if (!model) return "GEN";
+  let clean = model
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, "")
+    .split(" ")[0];
+  return clean || "GEN";
+}
+
+// Query Supabase for next sequence per brand+model
+async function fetchNextSequence(supabaseClient, brandC, modelC) {
+  const { data } = await supabaseClient
+    .from("listings")
+    .select("sequence_num")
+    .eq("brand", brandC)
+    .eq("model", modelC)
+    .order("sequence_num", { ascending: false })
+    .limit(1);
+
+  if (!data || data.length === 0) return 1;
+  return (data[0].sequence_num || 0) + 1;
+}
+
+// Main function to generate human-friendly ID
+async function generatePrettySku(supabaseClient, brand, model) {
+  const bc = brandCode(brand);
+  const mc = modelCode(model);
+  const seq = await fetchNextSequence(supabaseClient, bc, mc);
+
+  const seqPadded = seq.toString().padStart(3, "0");
+  const pretty = `${bc}-${mc}-EMZ-${seqPadded}`;
+
+  return { pretty, bc, mc, seq };
 }
 
 // ---------- helper: escape HTML for print window ----------
@@ -211,10 +256,18 @@ export default function IntakePage() {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
 
-      // Generate item number as soon as first photo is added
+      // Generate EMZ-coded item number as soon as first photo is added
       if (!itemNumber) {
-        const generated = generateItemNumber();
-        setItemNumber(generated);
+        try {
+          const { pretty } = await generatePrettySku(
+            supabase,
+            brand,
+            model
+          );
+          setItemNumber(pretty);
+        } catch (genErr) {
+          console.error("Error generating SKU on photo add", genErr);
+        }
       }
 
       try {
@@ -277,10 +330,10 @@ export default function IntakePage() {
 
   // ---------- PRINT CARD ----------
   function handlePrintCard() {
-    // Make sure we have an item ID to put on the card + tag
+    // Make sure we have some ID to put on the card + tag
     let currentId = itemNumber;
     if (!currentId) {
-      currentId = generateItemNumber();
+      currentId = `EMZ-TEMP-${Date.now()}`;
       setItemNumber(currentId);
     }
 
@@ -536,7 +589,6 @@ export default function IntakePage() {
     win.print();
   }
 
-
   // ---------- AI LOOKUP ----------
   async function runAI() {
     const aiImages = images.filter((x) => x && x.url).map((x) => x.url);
@@ -549,13 +601,6 @@ export default function IntakePage() {
     if (!condition) {
       alert("Please grade the condition of the item before running EMZCurator AI.");
       return;
-    }
-
-    // Safety: if somehow no item number yet, generate it now
-    let currentItemNumber = itemNumber;
-    if (!currentItemNumber) {
-      currentItemNumber = generateItemNumber();
-      setItemNumber(currentItemNumber);
     }
 
     setIsAnalyzing(true);
@@ -625,6 +670,23 @@ export default function IntakePage() {
         });
       }
 
+      // Ensure we have an EMZ-coded item number using AI identity if needed
+      let currentItemNumber = itemNumber;
+      if (!currentItemNumber) {
+        try {
+          const { pretty } = await generatePrettySku(
+            supabase,
+            identity.brand || brand,
+            identity.model || model
+          );
+          currentItemNumber = pretty;
+          setItemNumber(currentItemNumber);
+        } catch (genErr) {
+          console.error("Error generating SKU in runAI", genErr);
+          currentItemNumber = itemNumber || "";
+        }
+      }
+
       // Build unified EMZCurator Description that includes all AI facts + item number
       const narrative = buildCuratorNarrative({
         aiResult: data,
@@ -683,13 +745,6 @@ export default function IntakePage() {
       }
     }
 
-    // Safety: ensure item number exists before save
-    let currentItemNumber = itemNumber;
-    if (!currentItemNumber) {
-      currentItemNumber = generateItemNumber();
-      setItemNumber(currentItemNumber);
-    }
-
     const imagesPayload = images.filter((img) => img !== null);
 
     // identity object: prefer AI identity, but merge with hidden overrides
@@ -702,6 +757,28 @@ export default function IntakePage() {
       color: color || aiIdentity.color || null,
       material: material || aiIdentity.material || null,
     };
+
+    // Ensure EMZ-coded item number exists using merged identity
+    let currentItemNumber = itemNumber;
+    let prettySku = null;
+    let seqNum = null;
+
+    if (!currentItemNumber) {
+      try {
+        const { pretty, seq } = await generatePrettySku(
+          supabase,
+          identity.brand,
+          identity.model
+        );
+        currentItemNumber = pretty;
+        prettySku = pretty;
+        seqNum = seq;
+        setItemNumber(currentItemNumber);
+      } catch (genErr) {
+        console.error("Error generating SKU in handleSave", genErr);
+        currentItemNumber = itemNumber || `EMZ-TEMP-${Date.now()}`;
+      }
+    }
 
     const pricing = aiData?.pricing || null;
     const seo = aiData?.seo
@@ -725,6 +802,8 @@ export default function IntakePage() {
       user_id: currentUserId,
       sku: currentItemNumber,
       item_number: currentItemNumber,
+      pretty_sku: prettySku || currentItemNumber,
+      sequence_num: seqNum,
 
       brand: identity.brand,
       model: identity.model,
@@ -1024,7 +1103,7 @@ export default function IntakePage() {
             type="text"
             value={itemNumber}
             onChange={(e) => setItemNumber(e.target.value)}
-            placeholder="Auto-generated on first photo"
+            placeholder="Auto-generated on first photo / AI"
             style={{
               padding: "4px 10px",
               fontSize: "11px",
@@ -1468,7 +1547,7 @@ export default function IntakePage() {
             gap: "12px",
           }}
         >
-                   {/* EMZCurator Description Hero (Print Card & Tags) */}
+          {/* EMZCurator Description Hero (Print Card & Tags) */}
           <div
             style={{
               background:
