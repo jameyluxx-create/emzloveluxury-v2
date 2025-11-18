@@ -783,7 +783,7 @@ export default function IntakePage() {
         <div
           style={{
             marginTop: "10px",
-            borderTop: "1px solid "#e5e7eb",
+            borderTop: "1px solid #e5e7eb",
           }}
         />
       </div>
