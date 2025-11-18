@@ -249,6 +249,7 @@ export default function IntakePage() {
 
     input.click();
   };
+
   // ---------- MAIN vs ADDITIONAL PHOTO HELPERS ----------
   const handleListingPhotoClick = () => {
     // use slot 0 as the hero listing photo
@@ -815,174 +816,79 @@ export default function IntakePage() {
               }}
             />
 
-{/* MAIN LISTING PHOTO (slot 0) */}
-<div style={{ marginBottom: "12px" }}>
-  <div
-    onClick={handleListingPhotoClick}
-    style={{
-      position: "relative",
-      width: "100%",
-      aspectRatio: "4 / 3",
-      borderRadius: "18px",
-      overflow: "hidden",
-      background:
-        "linear-gradient(135deg, #f6e3a5 0%, #d4af37 40%, #b68b22 100%)",
-      boxShadow: "0 18px 40px rgba(0,0,0,0.55)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      cursor: "pointer",
-      transition: "transform 0.16s ease, box-shadow 0.16s ease",
-    }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.transform = "translateY(-1px) scale(1.01)";
-      e.currentTarget.style.boxShadow =
-        "0 20px 44px rgba(0,0,0,0.70)";
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.transform = "none";
-      e.currentTarget.style.boxShadow =
-        "0 18px 40px rgba(0,0,0,0.55)";
-    }}
-  >
-    {images[0] && images[0].url ? (
-      <>
-        <img
-          src={images[0].url}
-          alt="Listing photo"
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-          }}
-        />
-        <span
-          style={{
-            position: "absolute",
-            bottom: "10px",
-            right: "10px",
-            fontSize: "10px",
-            padding: "3px 8px",
-            borderRadius: "999px",
-            background: "rgba(0,0,0,0.55)",
-            color: "#f9fafb",
-          }}
-        >
-          Click to update / replace
-        </span>
-      </>
-    ) : (
-      <>
-        {/* Center cream panel with EMZ heart */}
-        <div
-          style={{
-            width: "72%",
-            aspectRatio: "1 / 1",
-            borderRadius: "16px",
-            background: "#f7f3e8",
-            boxShadow: "0 8px 18px rgba(0,0,0,0.28)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <img
-            src="/emz-heart-gold.png"
-            alt="EMZ placeholder"
-            style={{
-              width: "70%",
-              height: "auto",
-              objectFit: "contain",
-              opacity: 0.98,
-              filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.25))",
-            }}
-          />
-        </div>
-
-        {/* Overlay label */}
-        <span
-          style={{
-            position: "absolute",
-            bottom: "14px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            fontSize: "12px",
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: "#111827",
-            background: "rgba(255,255,255,0.9)",
-            padding: "4px 12px",
-            borderRadius: "999px",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.28)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          Click to Add Listing Photo
-        </span>
-      </>
-    )}
-  </div>
-</div>
-
-    {/* Center cream panel with EMZ heart */}
-    <div
-      style={{
-        width: "72%",
-        aspectRatio: "1 / 1",
-        borderRadius: "16px",
-        background: "#f7f3e8",
-        boxShadow: "0 8px 18px rgba(0,0,0,0.28)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <img
-        src="/emz-heart-gold.png"
-        alt="EMZ placeholder"
-        style={{
-          width: "70%",
-          height: "auto",
-          objectFit: "contain",
-          opacity: 0.98,
-          filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.25))",
-        }}
-      />
-    </div>
-
-    {/* Overlay label */}
-    <span
-      style={{
-        position: "absolute",
-        bottom: "14px",
-        left: "50%",
-        transform: "translateX(-50%)",
-        fontSize: "12px",
-        letterSpacing: "0.12em",
-        textTransform: "uppercase",
-        color: "#111827",
-        background: "rgba(255,255,255,0.9)",
-        padding: "4px 12px",
-        borderRadius: "999px",
-        boxShadow: "0 2px 6px rgba(0,0,0,0.28)",
-        whiteSpace: "nowrap",
-      }}
-    >
-      Click to Add Listing Photo
-    </span>
-  </>
-)}
+            {/* MAIN LISTING PHOTO (slot 0) */}
+            <div style={{ marginBottom: "12px" }}>
+              <div
+                onClick={handleListingPhotoClick}
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  aspectRatio: "4 / 3",
+                  borderRadius: "18px",
+                  overflow: "hidden",
+                  background:
+                    "linear-gradient(135deg, #f6e3a5 0%, #d4af37 40%, #b68b22 100%)", // brushed gold
+                  boxShadow: "0 18px 40px rgba(0,0,0,0.55)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  transition:
+                    "transform 0.16s ease, box-shadow 0.16s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform =
+                    "translateY(-1px) scale(1.01)";
+                  e.currentTarget.style.boxShadow =
+                    "0 20px 44px rgba(0,0,0,0.70)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "none";
+                  e.currentTarget.style.boxShadow =
+                    "0 18px 40px rgba(0,0,0,0.55)";
+                }}
+              >
+                {images[0] && images[0].url ? (
                   <>
-                    {/* EMZ heart logo on brushed-gold background */}
+                    <img
+                      src={images[0].url}
+                      alt="Listing photo"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                    <span
+                      style={{
+                        position: "absolute",
+                        bottom: "10px",
+                        right: "10px",
+                        fontSize: "10px",
+                        padding: "3px 8px",
+                        borderRadius: "999px",
+                        background: "rgba(0,0,0,0.55)",
+                        color: "#f9fafb",
+                      }}
+                    >
+                      Click to update / replace
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    {/* EMZ heart directly on brushed-gold background */}
                     <img
                       src="/emz-heart-gold.png"
                       alt="EMZ placeholder"
                       style={{
-                        height: "90px",
-                        width: "auto",
-                        opacity: 0.9,
+                        width: "38%",
+                        maxWidth: "190px",
+                        height: "auto",
+                        objectFit: "contain",
+                        opacity: 0.96,
                         filter:
                           "drop-shadow(0 4px 8px rgba(0,0,0,0.35))",
+                        display: "block",
                       }}
                     />
 
@@ -1050,8 +956,7 @@ export default function IntakePage() {
                   fontSize: "10px",
                   padding: "4px 10px",
                   borderRadius: "999px",
-                  border:
-                    "1px solid rgba(56,189,248,0.8)",
+                  border: "1px solid rgba(56,189,248,0.8)",
                   background:
                     "radial-gradient(circle at top left, #0f172a, #020617)",
                   color: "#e0f2fe",
