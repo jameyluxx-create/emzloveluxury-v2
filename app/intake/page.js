@@ -277,54 +277,265 @@ export default function IntakePage() {
 
   // ---------- PRINT CARD ----------
   function handlePrintCard() {
-    const printContent = curatorNarrative || "";
-    const itemId = itemNumber || "EMZCurator Card";
+    // Make sure we have an item ID to put on the card + tag
+    let currentId = itemNumber;
+    if (!currentId) {
+      currentId = generateItemNumber();
+      setItemNumber(currentId);
+    }
 
-    const win = window.open("", "_blank", "width=800,height=600");
+    const listingUrl = `https://emzloveluxury.com/item/${encodeURIComponent(
+      currentId
+    )}`;
+
+    const narrative = curatorNarrative || "";
+    const inclusionsRaw = includedText || "";
+
+    // Build Comparable Sales & Pricing text block
+    const compsLines = [];
+    if (pricingPreview.retail_price) {
+      compsLines.push(
+        `Retail (approx., often USD): ${pricingPreview.retail_price}`
+      );
+    }
+    if (pricingPreview.comp_low || pricingPreview.comp_high) {
+      const low = pricingPreview.comp_low || "";
+      const high = pricingPreview.comp_high || "";
+      compsLines.push(`Comparable range: ${low} – ${high}`.trim());
+    }
+    if (pricingPreview.recommended_listing) {
+      compsLines.push(
+        `Recommended listing: ${pricingPreview.recommended_listing}`
+      );
+    }
+    if (pricingPreview.whatnot_start) {
+      compsLines.push(
+        `Suggested Whatnot start: ${pricingPreview.whatnot_start}`
+      );
+    }
+    if (currency && listingPrice) {
+      compsLines.push(
+        `Planned listing price: ${currency} ${listingPrice}`.trim()
+      );
+    }
+    if (cost) {
+      compsLines.push(`Your cost basis: ${currency} ${cost}`);
+    }
+    if (
+      pricingPreview.sources &&
+      Array.isArray(pricingPreview.sources) &&
+      pricingPreview.sources.length > 0
+    ) {
+      compsLines.push("");
+      compsLines.push("Comparable listings:");
+      pricingPreview.sources.forEach((src) => {
+        if (typeof src === "string") {
+          compsLines.push(`• ${src}`);
+        } else {
+          try {
+            compsLines.push(`• ${JSON.stringify(src)}`);
+          } catch (e) {
+            // ignore malformed source
+          }
+        }
+      });
+    }
+
+    const compsText =
+      compsLines.length > 0
+        ? compsLines.join("\n")
+        : "Run EMZCurator AI to pull recent comparable sales and suggested pricing.";
+
+    const brandLine = brand
+      ? `<div><strong>Brand:</strong> ${escapeHtml(brand)}</div>`
+      : "";
+    const modelLine = model
+      ? `<div><strong>Model:</strong> ${escapeHtml(model)}</div>`
+      : "";
+    const conditionLine = condition
+      ? `<div><strong>Condition:</strong> ${escapeHtml(condition)}</div>`
+      : "";
+
+    const win = window.open("", "_blank", "width=900,height=1100");
     if (!win) return;
 
     win.document.write(`<!DOCTYPE html>
 <html>
 <head>
-  <title>${escapeHtml(itemId)}</title>
+  <title>${escapeHtml(currentId)}</title>
   <style>
+    * { box-sizing: border-box; }
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      padding: 16px;
+      margin: 0;
+      padding: 24px;
       background: #ffffff;
       color: #111827;
     }
+    .page {
+      width: 8.5in;
+      margin: 0 auto;
+    }
     h1 {
-      font-size: 18px;
-      margin-bottom: 8px;
+      font-size: 20px;
+      margin: 0 0 4px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
     }
     h2 {
-      font-size: 12px;
+      font-size: 13px;
       text-transform: uppercase;
       letter-spacing: 0.16em;
       color: #4b5563;
+      margin: 16px 0 8px 0;
+    }
+    .meta {
+      font-size: 11px;
+      color: #374151;
       margin-bottom: 12px;
+    }
+    .meta div {
+      margin-bottom: 2px;
     }
     pre {
       white-space: pre-wrap;
       font-size: 12px;
       line-height: 1.4;
-      border: 1px solid #d1d5db;
+      margin: 0;
+    }
+    .card-section {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
       padding: 12px;
+      margin-bottom: 12px;
+    }
+    .tag-strip-wrapper {
+      margin-top: 24px;
+      padding-top: 12px;
+      border-top: 1px dashed #9ca3af;
+    }
+    .cut-line {
+      text-align: center;
+      font-size: 10px;
+      color: #6b7280;
+      margin-bottom: 6px;
+    }
+    .tag-strip {
+      border: 1px solid #9ca3af;
       border-radius: 8px;
+      padding: 8px;
+      display: flex;
+    }
+    .tag-half {
+      flex: 1;
+      padding: 4px 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .tag-half + .tag-half {
+      border-left: 1px dotted #9ca3af;
+    }
+    .tag-logo {
+      max-width: 180px;
+      margin-bottom: 6px;
+    }
+    .sku-text {
+      font-size: 11px;
+      font-weight: 600;
+      margin-top: 4px;
+      letter-spacing: 0.12em;
+    }
+    #qr-code, #barcode {
+      background: #ffffff;
+      padding: 4px;
+      border-radius: 4px;
+    }
+    @media print {
+      body {
+        padding: 0.5in;
+      }
+      .page {
+        width: 100%;
+      }
     }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 </head>
 <body>
-  <h1>EMZLove Luxury</h1>
-  <h2>EMZCurator Description · Print Card</h2>
-  <pre>${escapeHtml(printContent)}</pre>
+  <div class="page">
+    <h1>EMZLove Luxury</h1>
+    <div class="meta">
+      <div><strong>Item ID:</strong> ${escapeHtml(currentId)}</div>
+      ${brandLine}
+      ${modelLine}
+      ${conditionLine}
+    </div>
+
+    <div class="card-section">
+      <h2>EMZCurator Description</h2>
+      <pre>${escapeHtml(narrative)}</pre>
+    </div>
+
+    <div class="card-section">
+      <h2>Comparable Sales & Pricing</h2>
+      <pre>${escapeHtml(compsText)}</pre>
+    </div>
+
+    <div class="card-section">
+      <h2>Inclusions</h2>
+      <pre>${escapeHtml(inclusionsRaw || "Dust bag / strap / box, etc.")}</pre>
+    </div>
+
+    <div class="tag-strip-wrapper">
+      <div class="cut-line">──────────── Cut along this line ────────────</div>
+      <div class="tag-strip">
+        <div class="tag-half">
+          <img src="/emz-scan-tag.png" alt="EMZLoveLuxury tag" class="tag-logo" />
+          <div id="qr-code"></div>
+          <div class="sku-text">${escapeHtml(currentId)}</div>
+        </div>
+        <div class="tag-half">
+          <img src="/emz-scan-tag.png" alt="EMZLoveLuxury tag" class="tag-logo" />
+          <svg id="barcode"></svg>
+          <div class="sku-text">${escapeHtml(currentId)}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var sku = "${escapeHtml(currentId)}";
+      var url = "${escapeHtml(listingUrl)}";
+      if (window.QRCode) {
+        new QRCode(document.getElementById("qr-code"), {
+          text: url,
+          width: 96,
+          height: 96
+        });
+      }
+      if (window.JsBarcode) {
+        JsBarcode("#barcode", sku, {
+          format: "CODE128",
+          lineColor: "#111827",
+          width: 1.4,
+          height: 40,
+          displayValue: false,
+          margin: 0
+        });
+      }
+    })();
+  </script>
 </body>
 </html>`);
     win.document.close();
     win.focus();
     win.print();
   }
+
 
   // ---------- AI LOOKUP ----------
   async function runAI() {
@@ -1257,7 +1468,7 @@ export default function IntakePage() {
             gap: "12px",
           }}
         >
-          {/* EMZCurator Description Hero (Print Card & Tags) */}
+                   {/* EMZCurator Description Hero (Print Card & Tags) */}
           <div
             style={{
               background:
@@ -1288,6 +1499,8 @@ export default function IntakePage() {
               >
                 EMZCurator Description
               </h2>
+
+              {/* ------- PRINT CARD & TAGS BUTTON ------- */}
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <span
                   style={{
@@ -1301,6 +1514,7 @@ export default function IntakePage() {
                 >
                   Print Card Text
                 </span>
+
                 <button
                   type="button"
                   onClick={handlePrintCard}
@@ -1318,6 +1532,8 @@ export default function IntakePage() {
                 </button>
               </div>
             </div>
+
+            {/* ------- CURATOR TEXTAREA ------- */}
             <textarea
               ref={narrativeRef}
               value={curatorNarrative}
@@ -1334,9 +1550,11 @@ export default function IntakePage() {
                 overflow: "hidden",
               }}
               placeholder={
-                "When you run EMZCurator AI, a complete description appears here: item number, identity, measurements, features, market note, value range, and sales-forward description — ready to print or read live."
+                "When you run EMZCurator AI, a complete description appears here: item number, identity, measurements, features, market note, comps, and the final sales-forward narration."
               }
             />
+
+            {/* ------- INFO ABOUT PRINT & TAGS ------- */}
             <p
               style={{
                 fontSize: "10px",
@@ -1345,13 +1563,11 @@ export default function IntakePage() {
               }}
             >
               When you click <strong>Print Card &amp; Tags</strong>, the system
-              will use this EMZCurator Description (plus your Print Card Text)
-              for the 8.5×11 card, and a bottom strip layout you can cut and
-              fold into a two-sided tag with logo, QR code, barcode, and the
-              item ID.
+              will generate the full 8.5×11 card with EMZCurator Description,
+              Comparable Sales, Inclusions, and a detachable foldable tag with
+              logo ×2, QR code, barcode, and the item ID.
             </p>
           </div>
-
 
           {/* Pricing & Status Card (Listing Price + AI Preview) */}
           <div
