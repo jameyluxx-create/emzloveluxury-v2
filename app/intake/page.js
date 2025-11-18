@@ -148,6 +148,13 @@ export default function IntakePage() {
   const [userInventory, setUserInventory] = useState([]);
   const [globalInventory, setGlobalInventory] = useState([]);
 
+  // Inventory search/filter
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [inventoryStatusFilter, setInventoryStatusFilter] = useState("all");
+
+  // Comparable listings modal
+  const [showCompsModal, setShowCompsModal] = useState(false);
+
   // Refs for auto-growing textareas
   const narrativeRef = useRef(null);
   const includedRef = useRef(null);
@@ -165,7 +172,7 @@ export default function IntakePage() {
     }
   }, [curatorNarrative]);
 
-  // Auto-grow Included Items textarea
+  // Auto-grow Inclusions textarea
   useEffect(() => {
     if (includedRef.current) {
       const el = includedRef.current;
@@ -431,6 +438,19 @@ export default function IntakePage() {
     }
   }
 
+  // ---------- READY TO SELL TOGGLE ----------
+  function handleReadyToSellChange(e) {
+    const checked = e.target.checked;
+    if (checked) {
+      const priceNum = Number(listingPrice || 0);
+      if (!listingPrice || isNaN(priceNum) || priceNum <= 0) {
+        alert("Please Set Listing Price greater than zero before marking Ready to Sell.");
+        return;
+      }
+    }
+    setListForSale(checked);
+  }
+
   // ---------- SAVE ITEM ----------
   async function handleSave() {
     setIsSaving(true);
@@ -441,6 +461,15 @@ export default function IntakePage() {
       setErrorMsg("Please grade the condition of the item.");
       setIsSaving(false);
       return;
+    }
+
+    if (listForSale) {
+      const priceNum = Number(listingPrice || 0);
+      if (!listingPrice || isNaN(priceNum) || priceNum <= 0) {
+        setErrorMsg("Please Set Listing Price greater than zero before saving as Ready to Sell.");
+        setIsSaving(false);
+        return;
+      }
     }
 
     // Safety: ensure item number exists before save
@@ -558,6 +587,27 @@ export default function IntakePage() {
 
     setIsSaving(false);
   }
+
+  // ---------- INVENTORY DERIVED DATA ----------
+  const latestFive = userInventory.slice(0, 5);
+
+  const filteredInventory = userInventory.filter((item) => {
+    const term = inventorySearch.trim().toLowerCase();
+    if (inventoryStatusFilter !== "all") {
+      if ((item.status || "intake") !== inventoryStatusFilter) return false;
+    }
+    if (!term) return true;
+
+    const sku = (item.item_number || item.sku || "").toLowerCase();
+    const b = (item.brand || "").toLowerCase();
+    const m = (item.model || "").toLowerCase();
+
+    return (
+      sku.includes(term) ||
+      b.includes(term) ||
+      m.includes(term)
+    );
+  });
 
   // ---------- RENDER ----------
   return (
@@ -733,9 +783,88 @@ export default function IntakePage() {
         <div
           style={{
             marginTop: "10px",
-            borderTop: "1px solid #e5e7eb",
+            borderTop: "1px solid "#e5e7eb",
           }}
         />
+      </div>
+
+      {/* ITEM CONTROL BAR – full width under header */}
+      <div
+        style={{
+          maxWidth: "1180px",
+          margin: "0 auto 12px auto",
+          padding: "8px 12px",
+          borderRadius: "999px",
+          border: "1px solid rgba(30,64,175,0.6)",
+          background:
+            "linear-gradient(90deg, rgba(15,23,42,0.95), rgba(8,47,73,0.95))",
+          boxShadow: "0 12px 28px rgba(15,23,42,0.8)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "8px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+            Item #
+          </span>
+          <input
+            type="text"
+            value={itemNumber}
+            onChange={(e) => setItemNumber(e.target.value)}
+            placeholder="Auto-generated on first photo"
+            style={{
+              padding: "4px 10px",
+              fontSize: "11px",
+              borderRadius: "999px",
+              border: "1px solid #1f2937",
+              background: "#020617",
+              color: "#e5e7eb",
+              minWidth: "190px",
+              textAlign: "center",
+            }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+            style={{
+              padding: "8px 14px",
+              fontSize: "12px",
+              borderRadius: "999px",
+              border: "1px solid #facc15",
+              background: "#facc15",
+              color: "#020617",
+              fontWeight: 600,
+              cursor: isSaving ? "default" : "pointer",
+            }}
+          >
+            {isSaving
+              ? "Saving…"
+              : listForSale
+              ? "Save & Mark Ready to Sell"
+              : "Save to Inventory"}
+          </button>
+          <label
+            style={{
+              fontSize: "11px",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              color: "#e5e7eb",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={listForSale}
+              onChange={handleReadyToSellChange}
+            />
+            Ready to Sell
+          </label>
+        </div>
       </div>
 
       {/* MAIN 2-COLUMN GRID */}
@@ -835,7 +964,8 @@ export default function IntakePage() {
                   alignItems: "center",
                   justifyContent: "center",
                   cursor: "pointer",
-                  transition: "transform 0.16s ease, box-shadow 0.16s ease",
+                  transition:
+                    "transform 0.16s ease, box-shadow 0.16s ease",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform =
@@ -1119,7 +1249,7 @@ export default function IntakePage() {
           </p>
         </section>
 
-        {/* RIGHT COLUMN – Item # + EMZCurator Description + Pricing + Included Items */}
+        {/* RIGHT COLUMN – EMZCurator Description + Pricing + Inclusions */}
         <section
           style={{
             display: "flex",
@@ -1127,77 +1257,6 @@ export default function IntakePage() {
             gap: "12px",
           }}
         >
-          {/* Item number + Save + Ready to Sell */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: "11px", color: "#9ca3af" }}>
-                Item #
-              </span>
-              <input
-                type="text"
-                value={itemNumber}
-                onChange={(e) => setItemNumber(e.target.value)}
-                placeholder="Auto-generated on first photo"
-                style={{
-                  padding: "4px 10px",
-                  fontSize: "11px",
-                  borderRadius: "999px",
-                  border: "1px solid #1f2937",
-                  background: "#020617",
-                  color: "#e5e7eb",
-                  minWidth: "190px",
-                  textAlign: "center",
-                }}
-              />
-            </div>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={isSaving}
-                style={{
-                  padding: "8px 14px",
-                  fontSize: "12px",
-                  borderRadius: "999px",
-                  border: "1px solid #facc15",
-                  background: "#facc15",
-                  color: "#020617",
-                  fontWeight: 600,
-                  cursor: isSaving ? "default" : "pointer",
-                }}
-              >
-                {isSaving
-                  ? "Saving…"
-                  : listForSale
-                  ? "Save & Mark Ready to Sell"
-                  : "Save to Inventory"}
-              </button>
-              <label
-                style={{
-                  fontSize: "11px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  color: "#e5e7eb",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={listForSale}
-                  onChange={(e) => setListForSale(e.target.checked)}
-                />
-                Ready to Sell
-              </label>
-            </div>
-          </div>
-
           {/* EMZCurator Description Hero (Print Card) */}
           <div
             style={{
@@ -1303,7 +1362,7 @@ export default function IntakePage() {
             </h2>
 
             <label style={labelStyle}>
-              Target Listing Price ({currency})
+              Set Listing Price ({currency})
             </label>
             <input
               type="number"
@@ -1322,10 +1381,40 @@ export default function IntakePage() {
                 background: "#020617",
               }}
             >
-              <strong style={{ fontSize: "12px" }}>AI Pricing Preview</strong>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "4px",
+                }}
+              >
+                <strong style={{ fontSize: "12px" }}>
+                  Comparable Sales Listings
+                </strong>
+                {pricingPreview.sources &&
+                  pricingPreview.sources.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCompsModal(true)}
+                      style={{
+                        fontSize: "10px",
+                        padding: "3px 8px",
+                        borderRadius: "999px",
+                        border: "1px solid rgba(56,189,248,0.9)",
+                        background: "rgba(15,23,42,0.9)",
+                        color: "#e0f2fe",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Show It
+                    </button>
+                  )}
+              </div>
               {pricingPreview.retail_price && (
                 <p style={previewStyle}>
-                  Retail (approx., likely USD): {pricingPreview.retail_price}
+                  Retail (approx., often USD): {pricingPreview.retail_price}
                 </p>
               )}
               {pricingPreview.comp_low && (
@@ -1348,10 +1437,20 @@ export default function IntakePage() {
                   Suggested Whatnot Start: {pricingPreview.whatnot_start}
                 </p>
               )}
+              {!pricingPreview.retail_price &&
+                !pricingPreview.comp_low &&
+                !pricingPreview.comp_high &&
+                !pricingPreview.recommended_listing &&
+                !pricingPreview.whatnot_start && (
+                  <p style={previewStyle}>
+                    Run EMZCurator AI to pull recent comparable sales and
+                    suggested pricing.
+                  </p>
+                )}
             </div>
           </div>
 
-          {/* Included Items */}
+          {/* Inclusions */}
           <div
             style={{
               background: "rgba(15,23,42,0.96)",
@@ -1370,7 +1469,7 @@ export default function IntakePage() {
                 marginBottom: "8px",
               }}
             >
-              Included Items
+              Inclusions
             </h2>
             <p
               style={{
@@ -1379,8 +1478,8 @@ export default function IntakePage() {
                 marginBottom: "4px",
               }}
             >
-              One per line: dust bag, strap, box, authenticity card, inserts,
-              etc.
+              Add all items included here, one per line: dust bag, strap, box,
+              authenticity card, inserts, etc.
             </p>
             <textarea
               ref={includedRef}
@@ -1409,100 +1508,262 @@ export default function IntakePage() {
           background: "rgba(15,23,42,0.96)",
         }}
       >
-        <h3 style={{ fontSize: "14px", fontWeight: 600, marginBottom: "8px" }}>
-          My Latest Intakes
+        <h3
+          style={{ fontSize: "14px", fontWeight: 600, marginBottom: "8px" }}
+        >
+          Inventory
         </h3>
+
         {userInventory.length === 0 ? (
           <p style={{ fontSize: "12px", color: "#9ca3af" }}>
             No items yet. Save an intake to see it here.
           </p>
         ) : (
-          <div
-            style={{
-              maxHeight: "220px",
-              overflowY: "auto",
-              borderRadius: "10px",
-              border: "1px solid #111827",
-            }}
-          >
-            <table
+          <>
+            {/* Latest 5 as thumbnail cards */}
+            <p
               style={{
-                width: "100%",
-                borderCollapse: "collapse",
                 fontSize: "11px",
+                color: "#9ca3af",
+                marginBottom: "6px",
               }}
             >
-              <thead>
-                <tr
-                  style={{
-                    background: "#020617",
-                    borderBottom: "1px solid #111827",
-                  }}
-                >
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: "6px 8px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    SKU
-                  </th>
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: "6px 8px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Brand
-                  </th>
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: "6px 8px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Model
-                  </th>
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: "6px 8px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {userInventory.map((item) => (
-                  <tr
+              Showing your 5 most recent intakes:
+            </p>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                marginBottom: "12px",
+              }}
+            >
+              {latestFive.map((item) => {
+                const hero =
+                  item.images &&
+                  item.images[0] &&
+                  (item.images[0].url ||
+                    item.images[0].image_url ||
+                    item.images[0].src);
+                return (
+                  <div
                     key={item.id}
                     style={{
-                      borderBottom: "1px solid #020617",
+                      flex: "0 0 min(180px, 100%)",
+                      borderRadius: "10px",
+                      overflow: "hidden",
+                      border: "1px solid #111827",
                       background: "#020617",
+                      boxShadow: "0 8px 20px rgba(0,0,0,0.6)",
                     }}
                   >
-                    <td style={{ padding: "4px 8px" }}>
-                      {item.item_number || item.sku || "—"}
-                    </td>
-                    <td style={{ padding: "4px 8px" }}>
-                      {item.brand || "—"}
-                    </td>
-                    <td style={{ padding: "4px 8px" }}>
-                      {item.model || "—"}
-                    </td>
-                    <td style={{ padding: "4px 8px" }}>
-                      {item.status || "intake"}
-                    </td>
+                    <div
+                      style={{
+                        width: "100%",
+                        aspectRatio: "4 / 3",
+                        background: "#020617",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {hero ? (
+                        <img
+                          src={hero}
+                          alt={item.model || item.brand || "Inventory item"}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "10px",
+                            color: "#6b7280",
+                          }}
+                        >
+                          No photo
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ padding: "6px 8px" }}>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#9ca3af",
+                          marginBottom: "2px",
+                        }}
+                      >
+                        {item.item_number || item.sku || "—"}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          color: "#e5e7eb",
+                        }}
+                      >
+                        {item.brand || "—"}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#9ca3af",
+                        }}
+                      >
+                        {item.model || "—"}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          marginTop: "4px",
+                          color:
+                            (item.status || "intake") === "ready_to_sell"
+                              ? "#bbf7d0"
+                              : "#fde68a",
+                        }}
+                      >
+                        {(item.status || "intake") === "ready_to_sell"
+                          ? "Ready to Sell"
+                          : "Intake"}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Search + filter over full inventory */}
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                alignItems: "center",
+                marginBottom: "8px",
+              }}
+            >
+              <input
+                type="text"
+                value={inventorySearch}
+                onChange={(e) => setInventorySearch(e.target.value)}
+                placeholder="Search by SKU, brand, or model…"
+                style={{
+                  ...inputStyle,
+                  marginBottom: 0,
+                  flex: 1,
+                  fontSize: "11px",
+                }}
+              />
+              <select
+                value={inventoryStatusFilter}
+                onChange={(e) =>
+                  setInventoryStatusFilter(e.target.value)
+                }
+                style={{
+                  ...inputStyle,
+                  marginBottom: 0,
+                  width: "180px",
+                  fontSize: "11px",
+                }}
+              >
+                <option value="all">All statuses</option>
+                <option value="intake">Intake</option>
+                <option value="ready_to_sell">Ready to Sell</option>
+              </select>
+            </div>
+
+            <div
+              style={{
+                maxHeight: "220px",
+                overflowY: "auto",
+                borderRadius: "10px",
+                border: "1px solid #111827",
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: "11px",
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      background: "#020617",
+                      borderBottom: "1px solid #111827",
+                    }}
+                  >
+                    <th
+                      style={{
+                        textAlign: "left",
+                        padding: "6px 8px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      SKU
+                    </th>
+                    <th
+                      style={{
+                        textAlign: "left",
+                        padding: "6px 8px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Brand
+                    </th>
+                    <th
+                      style={{
+                        textAlign: "left",
+                        padding: "6px 8px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Model
+                    </th>
+                    <th
+                      style={{
+                        textAlign: "left",
+                        padding: "6px 8px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Status
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredInventory.map((item) => (
+                    <tr
+                      key={item.id}
+                      style={{
+                        borderBottom: "1px solid #020617",
+                        background: "#020617",
+                      }}
+                    >
+                      <td style={{ padding: "4px 8px" }}>
+                        {item.item_number || item.sku || "—"}
+                      </td>
+                      <td style={{ padding: "4px 8px" }}>
+                        {item.brand || "—"}
+                      </td>
+                      <td style={{ padding: "4px 8px" }}>
+                        {item.model || "—"}
+                      </td>
+                      <td style={{ padding: "4px 8px" }}>
+                        {item.status || "intake"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         <p
@@ -1515,6 +1776,101 @@ export default function IntakePage() {
           Global inventory: {globalInventory.length} items
         </p>
       </div>
+
+      {/* COMPARABLE LISTINGS MODAL */}
+      {showCompsModal && (
+        <div style={modalBackdropStyle}>
+          <div style={modalWindowStyle}>
+            <h3
+              style={{
+                fontSize: "14px",
+                fontWeight: 600,
+                marginBottom: "6px",
+              }}
+            >
+              Comparable Sales Listings
+            </h3>
+            <p
+              style={{
+                fontSize: "11px",
+                color: "#9ca3af",
+                marginBottom: "8px",
+              }}
+            >
+              Pulled from EMZCurator AI lookup. Use these as a quick feel for
+              market range.
+            </p>
+            <div
+              style={{
+                maxHeight: "260px",
+                overflowY: "auto",
+                borderRadius: "8px",
+                border: "1px solid #1f2937",
+                padding: "8px",
+                background: "#020617",
+                fontSize: "11px",
+              }}
+            >
+              {pricingPreview.sources && pricingPreview.sources.length > 0 ? (
+                pricingPreview.sources.map((src, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: "6px 4px",
+                      borderBottom:
+                        idx === pricingPreview.sources.length - 1
+                          ? "none"
+                          : "1px solid #111827",
+                    }}
+                  >
+                    {typeof src === "string" ? (
+                      <span>{src}</span>
+                    ) : (
+                      <pre
+                        style={{
+                          margin: 0,
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {JSON.stringify(src, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  No comparable listings were returned by EMZCurator for this
+                  item yet.
+                </p>
+              )}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginTop: "10px",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setShowCompsModal(false)}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: "11px",
+                  borderRadius: "999px",
+                  border: "1px solid #38bdf8",
+                  background: "#0f172a",
+                  color: "#e0f2fe",
+                  cursor: "pointer",
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1690,4 +2046,23 @@ const previewStyle = {
   fontSize: "11px",
   margin: "2px 0",
   color: "#9ca3af",
+};
+
+const modalBackdropStyle = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(15,23,42,0.75)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 50,
+};
+
+const modalWindowStyle = {
+  width: "min(480px, 100% - 32px)",
+  borderRadius: "16px",
+  border: "1px solid rgba(56,189,248,0.8)",
+  background: "rgba(15,23,42,0.98)",
+  boxShadow: "0 20px 60px rgba(0,0,0,0.95)",
+  padding: "14px 16px 12px 16px",
 };
