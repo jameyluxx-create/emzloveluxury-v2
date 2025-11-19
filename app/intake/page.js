@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
 
-// ---------- helper: resize image on client before upload ----------
 async function resizeImage(file, maxSize = 1200, quality = 0.8) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
@@ -44,75 +43,14 @@ async function resizeImage(file, maxSize = 1200, quality = 0.8) {
           quality
         );
       };
-
       img.onerror = (err) => reject(err);
       img.src = event.target.result;
     };
-
     reader.onerror = (err) => reject(err);
     reader.readAsDataURL(file);
   });
 }
 
-// ---------- NEW EMZLoveLuxury ITEM NUMBER SYSTEM ----------
-
-// brand → 2–4 letter standardized code
-const brandCodes = {
-  "louis vuitton": "LV",
-  "lv": "LV",
-  "chanel": "CH",
-  "gucci": "GU",
-  "prada": "PR",
-  "celine": "CE",
-  "loewe": "LO",
-  "miu miu": "MIU",
-  "coach": "CO",
-};
-
-// Convert brand string → code
-function brandCode(brand) {
-  if (!brand) return "BR";
-  const key = brand.trim().toLowerCase();
-  return brandCodes[key] || brand.substring(0, 3).toUpperCase();
-}
-
-// Convert model string → code
-function modelCode(model) {
-  if (!model) return "GEN";
-  let clean = model
-    .toUpperCase()
-    .replace(/[^A-Z0-9 ]/g, "")
-    .split(" ")[0];
-  return clean || "GEN";
-}
-
-// Query Supabase for next sequence per brand+model
-async function fetchNextSequence(supabaseClient, brandC, modelC) {
-  const { data } = await supabaseClient
-    .from("listings")
-    .select("sequence_num")
-    .eq("brand", brandC)
-    .eq("model", modelC)
-    .order("sequence_num", { ascending: false })
-    .limit(1);
-
-  if (!data || data.length === 0) return 1;
-  return (data[0].sequence_num || 0) + 1;
-}
-
-// Main function to generate human-friendly ID
-async function generatePrettySku(supabaseClient, brand, model) {
-  const bc = brandCode(brand);
-  const mc = modelCode(model);
-  const seq = await fetchNextSequence(supabaseClient, bc, mc);
-
-  const seqPadded = seq.toString().padStart(3, "0");
-  const pretty = `${bc}-${mc}-EMZ-${seqPadded}`;
-
-  return { pretty, bc, mc, seq };
-}
-
-// ---------- helper: escape HTML for print window ----------
 function escapeHtml(str) {
   if (!str) return "";
   return str
@@ -121,7 +59,6 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;");
 }
 
-// ---------- PLACEHOLDER IMAGES (6 slots) ----------
 const placeholderImages = [
   "/placeholders/Emzthumb-+AddMain.png",
   "/placeholders/Emzthumb-+AddFront.png",
@@ -132,31 +69,31 @@ const placeholderImages = [
 ];
 
 export default function IntakePage() {
-  // TODO: replace with actual Supabase auth
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const currentUserId = "demo-user-123";
 
-  // CORE FIELDS
   const [itemNumber, setItemNumber] = useState("");
+  const [editingId, setEditingId] = useState(null);
+
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [category, setCategory] = useState("");
   const [color, setColor] = useState("");
   const [material, setMaterial] = useState("");
 
-  const [condition, setCondition] = useState(""); // user must choose before AI
+  const [condition, setCondition] = useState("");
   const [gradingNotes, setGradingNotes] = useState("");
 
-  const [currency, setCurrency] = useState("USD"); // user-selectable currency
+  const [currency, setCurrency] = useState("USD");
   const [cost, setCost] = useState("");
   const [listingPrice, setListingPrice] = useState("");
 
-  // EMZCurator Description (print card)
   const [curatorNarrative, setCuratorNarrative] = useState("");
-
-  // Included items as raw text (one per line)
   const [includedText, setIncludedText] = useState("");
+  const [keywordsText, setKeywordsText] = useState("");
 
-  // Pricing preview from AI
   const [pricingPreview, setPricingPreview] = useState({
     retail_price: null,
     comp_low: null,
@@ -166,10 +103,7 @@ export default function IntakePage() {
     sources: [],
   });
 
-  // AI structured data
   const [aiData, setAiData] = useState(null);
-
-  // Dimensions from AI to build typical measurements line
   const [dimensions, setDimensions] = useState({
     length: "",
     height: "",
@@ -177,30 +111,25 @@ export default function IntakePage() {
     strap_drop: "",
   });
 
-  // Listing controls
   const [listForSale, setListForSale] = useState(false);
 
-  // Photo grid (10 slots: [0] = main listing photo, 1–9 = additional)
   const [images, setImages] = useState(Array(10).fill(null));
 
-  // Flags
   const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Inventory summary
   const [userInventory, setUserInventory] = useState([]);
   const [globalInventory, setGlobalInventory] = useState([]);
 
-  // Inventory search/filter
   const [inventorySearch, setInventorySearch] = useState("");
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState("all");
 
-  // Comparable listings modal
   const [showCompsModal, setShowCompsModal] = useState(false);
 
-  // Refs for auto-growing textareas
+  const [initialItemLoaded, setInitialItemLoaded] = useState(false);
+
   const narrativeRef = useRef(null);
   const includedRef = useRef(null);
 
@@ -208,7 +137,13 @@ export default function IntakePage() {
     loadInventory();
   }, []);
 
-  // Auto-grow EMZCurator Description textarea
+  useEffect(() => {
+    const itemId = searchParams.get("item");
+    if (itemId && !initialItemLoaded) {
+      loadItemById(itemId);
+    }
+  }, [searchParams, initialItemLoaded]);
+
   useEffect(() => {
     if (narrativeRef.current) {
       const el = narrativeRef.current;
@@ -217,7 +152,6 @@ export default function IntakePage() {
     }
   }, [curatorNarrative]);
 
-  // Auto-grow Inclusions textarea
   useEffect(() => {
     if (includedRef.current) {
       const el = includedRef.current;
@@ -246,7 +180,82 @@ export default function IntakePage() {
     }
   }
 
-  // ---------- REPLACE IMAGE ----------
+  async function loadItemById(id) {
+    try {
+      const { data, error } = await supabase
+        .from("listings")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error) {
+        console.error("Error loading item by id", error);
+        return;
+      }
+
+      setEditingId(data.id);
+      setItemNumber(data.id || "");
+      setBrand(data.brand || "");
+      setModel(data.model || "");
+      setCategory(data.category || data.identity?.category_primary || "");
+      setColor(data.color || data.identity?.color || "");
+      setMaterial(data.material || data.identity?.material || "");
+      setCondition(data.condition || "");
+      setGradingNotes(data.condition_notes || "");
+      setCurrency(data.currency || "USD");
+      setCost(
+        data.cost !== null && data.cost !== undefined ? String(data.cost) : ""
+      );
+      setListingPrice(
+        data.listing_price !== null && data.listing_price !== undefined
+          ? String(data.listing_price)
+          : ""
+      );
+      setCuratorNarrative(data.description || "");
+      setDimensions(
+        data.dimensions || { length: "", height: "", depth: "", strap_drop: "" }
+      );
+      if (Array.isArray(data.included_items)) {
+        setIncludedText(data.included_items.join("\n"));
+      } else {
+        setIncludedText("");
+      }
+      if (Array.isArray(data.search_keywords)) {
+        setKeywordsText(data.search_keywords.join(", "));
+      } else {
+        setKeywordsText("");
+      }
+      if (data.pricing) {
+        setPricingPreview({
+          retail_price: data.pricing.retail_price || null,
+          comp_low: data.pricing.comp_low || null,
+          comp_high: data.pricing.comp_high || null,
+          recommended_listing: data.pricing.recommended_listing || null,
+          whatnot_start: data.pricing.whatnot_start || null,
+          sources: data.pricing.sources || [],
+        });
+      } else {
+        setPricingPreview({
+          retail_price: null,
+          comp_low: null,
+          comp_high: null,
+          recommended_listing: null,
+          whatnot_start: null,
+          sources: [],
+        });
+      }
+      if (Array.isArray(data.images)) {
+        setImages(data.images.concat(Array(10 - data.images.length).fill(null)));
+      } else {
+        setImages(Array(10).fill(null));
+      }
+      setListForSale(data.status === "ready_to_sell");
+      setInitialItemLoaded(true);
+    } catch (err) {
+      console.error("Error loading item by id", err);
+    }
+  }
+
   const handleReplaceImage = (slotIndex) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -255,20 +264,6 @@ export default function IntakePage() {
     input.onchange = async (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
-
-      // Generate EMZ-coded item number as soon as first photo is added
-      if (!itemNumber) {
-        try {
-          const { pretty } = await generatePrettySku(
-            supabase,
-            brand,
-            model
-          );
-          setItemNumber(pretty);
-        } catch (genErr) {
-          console.error("Error generating SKU on photo add", genErr);
-        }
-      }
 
       try {
         const resizedBlob = await resizeImage(file, 1200, 0.8);
@@ -310,33 +305,28 @@ export default function IntakePage() {
     input.click();
   };
 
-  // ---------- MAIN vs ADDITIONAL PHOTO HELPERS ----------
   const handleListingPhotoClick = () => {
-    // use slot 0 as the hero listing photo
     handleReplaceImage(0);
   };
 
   const handleAddAdditionalPhotosClick = () => {
-    // find first empty slot from 1–9
     const nextSlot = images.findIndex((img, idx) => idx > 0 && img === null);
-
     if (nextSlot === -1) {
       alert("You’ve reached the maximum of 9 additional photos.");
       return;
     }
-
     handleReplaceImage(nextSlot);
   };
 
-  // ---------- PRINT CARD ----------
   function handlePrintCard() {
-    // Make sure we have some ID to put on the card + tag
-    let currentId = itemNumber;
-    if (!currentId) {
-      currentId = `EMZ-TEMP-${Date.now()}`;
-      setItemNumber(currentId);
+    if (!itemNumber) {
+      alert(
+        "Please save this item to inventory first so we can assign a permanent Item ID for the card and tags."
+      );
+      return;
     }
 
+    const currentId = itemNumber;
     const listingUrl = `https://emzloveluxury.com/item/${encodeURIComponent(
       currentId
     )}`;
@@ -344,7 +334,6 @@ export default function IntakePage() {
     const narrative = curatorNarrative || "";
     const inclusionsRaw = includedText || "";
 
-    // Build Comparable Sales & Pricing text block
     const compsLines = [];
     if (pricingPreview.retail_price) {
       compsLines.push(
@@ -387,9 +376,7 @@ export default function IntakePage() {
         } else {
           try {
             compsLines.push(`• ${JSON.stringify(src)}`);
-          } catch (e) {
-            // ignore malformed source
-          }
+          } catch {}
         }
       });
     }
@@ -589,7 +576,6 @@ export default function IntakePage() {
     win.print();
   }
 
-  // ---------- AI LOOKUP ----------
   async function runAI() {
     const aiImages = images.filter((x) => x && x.url).map((x) => x.url);
 
@@ -635,7 +621,6 @@ export default function IntakePage() {
 
       const identity = data.identity || {};
 
-      // Fill identity-style fields from AI (only used internally, not shown)
       if (identity.brand) setBrand((prev) => prev || identity.brand);
       if (identity.model) setModel((prev) => prev || identity.model);
       if (identity.category_primary)
@@ -643,7 +628,6 @@ export default function IntakePage() {
       if (identity.color) setColor((prev) => prev || identity.color);
       if (identity.material) setMaterial((prev) => prev || identity.material);
 
-      // Dimensions (used only for typical measurements line)
       if (data.dimensions) {
         setDimensions((prev) => ({
           length: data.dimensions.length || prev.length,
@@ -653,12 +637,10 @@ export default function IntakePage() {
         }));
       }
 
-      // Included items from AI → text with one per line
       if (Array.isArray(data.included_items)) {
         setIncludedText(data.included_items.join("\n"));
       }
 
-      // Pricing preview
       if (data.pricing) {
         setPricingPreview({
           retail_price: data.pricing.retail_price || null,
@@ -670,28 +652,11 @@ export default function IntakePage() {
         });
       }
 
-      // Ensure we have an EMZ-coded item number using AI identity if needed
-      let currentItemNumber = itemNumber;
-      if (!currentItemNumber) {
-        try {
-          const { pretty } = await generatePrettySku(
-            supabase,
-            identity.brand || brand,
-            identity.model || model
-          );
-          currentItemNumber = pretty;
-          setItemNumber(currentItemNumber);
-        } catch (genErr) {
-          console.error("Error generating SKU in runAI", genErr);
-          currentItemNumber = itemNumber || "";
-        }
-      }
-
-      // Build unified EMZCurator Description that includes all AI facts + item number
+      const currentId = itemNumber || "";
       const narrative = buildCuratorNarrative({
         aiResult: data,
         override: {
-          itemNumber: currentItemNumber,
+          itemNumber: currentId,
           brand,
           model,
           category,
@@ -702,7 +667,29 @@ export default function IntakePage() {
         },
       });
 
-      setCuratorNarrative((prev) => (prev ? prev : narrative));
+      if (!curatorNarrative) {
+        setCuratorNarrative(narrative);
+      }
+
+      const aiIncluded = Array.isArray(data.included_items)
+        ? data.included_items
+        : [];
+      const identityForKeywords = {
+        ...identity,
+        brand: brand || identity.brand || null,
+        model: model || identity.model || null,
+        category_primary: category || identity.category_primary || null,
+        color: color || identity.color || null,
+        material: material || identity.material || null,
+      };
+      if (!keywordsText) {
+        const suggestedKeywords = buildSearchKeywords({
+          identity: identityForKeywords,
+          narrative: narrative,
+          includedItems: aiIncluded,
+        });
+        setKeywordsText(suggestedKeywords.join(", "));
+      }
     } catch (err) {
       console.error(err);
       alert("EMZCurator AI lookup failed.");
@@ -711,20 +698,20 @@ export default function IntakePage() {
     }
   }
 
-  // ---------- READY TO SELL TOGGLE ----------
   function handleReadyToSellChange(e) {
     const checked = e.target.checked;
     if (checked) {
       const priceNum = Number(listingPrice || 0);
       if (!listingPrice || isNaN(priceNum) || priceNum <= 0) {
-        alert("Please Set Listing Price greater than zero before marking Ready to Sell.");
+        alert(
+          "Please Set Listing Price greater than zero before marking Ready to Sell."
+        );
         return;
       }
     }
     setListForSale(checked);
   }
 
-  // ---------- SAVE ITEM ----------
   async function handleSave() {
     setIsSaving(true);
     setErrorMsg("");
@@ -739,7 +726,9 @@ export default function IntakePage() {
     if (listForSale) {
       const priceNum = Number(listingPrice || 0);
       if (!listingPrice || isNaN(priceNum) || priceNum <= 0) {
-        setErrorMsg("Please Set Listing Price greater than zero before saving as Ready to Sell.");
+        setErrorMsg(
+          "Please Set Listing Price greater than zero before saving as Ready to Sell."
+        );
         setIsSaving(false);
         return;
       }
@@ -747,7 +736,6 @@ export default function IntakePage() {
 
     const imagesPayload = images.filter((img) => img !== null);
 
-    // identity object: prefer AI identity, but merge with hidden overrides
     const aiIdentity = aiData?.identity || {};
     const identity = {
       ...aiIdentity,
@@ -758,67 +746,43 @@ export default function IntakePage() {
       material: material || aiIdentity.material || null,
     };
 
-    // Ensure EMZ-coded item number exists using merged identity
-    let currentItemNumber = itemNumber;
-    let prettySku = null;
-    let seqNum = null;
-
-    if (!currentItemNumber) {
-      try {
-        const { pretty, seq } = await generatePrettySku(
-          supabase,
-          identity.brand,
-          identity.model
-        );
-        currentItemNumber = pretty;
-        prettySku = pretty;
-        seqNum = seq;
-        setItemNumber(currentItemNumber);
-      } catch (genErr) {
-        console.error("Error generating SKU in handleSave", genErr);
-        currentItemNumber = itemNumber || `EMZ-TEMP-${Date.now()}`;
-      }
-    }
-
     const pricing = aiData?.pricing || null;
     const seo = aiData?.seo
       ? { ...aiData.seo, user_override: false }
       : null;
 
-    // included items as array
     const includedItemsArray = includedText
       .split("\n")
       .map((x) => x.trim())
       .filter((x) => x.length > 0);
 
-    // future-friendly keyword field
-    const search_keywords = buildSearchKeywords({
-      identity,
-      narrative: curatorNarrative,
-      includedItems: includedItemsArray,
-    });
+    let search_keywords;
+    if (keywordsText.trim()) {
+      search_keywords = keywordsText
+        .split(/[,\n]/)
+        .map((x) => x.trim())
+        .filter((x) => x.length > 0);
+    } else {
+      search_keywords = buildSearchKeywords({
+        identity,
+        narrative: curatorNarrative,
+        includedItems: includedItemsArray,
+      });
+    }
 
     const payload = {
       user_id: currentUserId,
-      sku: currentItemNumber,
-      item_number: currentItemNumber,
-      pretty_sku: prettySku || currentItemNumber,
-      sequence_num: seqNum,
-
       brand: identity.brand,
       model: identity.model,
       category: identity.category_primary,
       color: identity.color,
       material: identity.material,
-
       description: curatorNarrative || null,
       condition,
       condition_notes: gradingNotes || null,
-
-      currency, // store chosen currency
+      currency,
       cost: cost ? Number(cost) : null,
       listing_price: listingPrice ? Number(listingPrice) : null,
-
       images: imagesPayload,
       identity,
       dimensions,
@@ -826,59 +790,58 @@ export default function IntakePage() {
       pricing,
       seo,
       search_keywords,
-
       status: listForSale ? "ready_to_sell" : "intake",
       is_public: listForSale,
     };
 
-    const { error } = await supabase.from("listings").insert(payload);
+    try {
+      let data, error;
 
-    if (error) {
-      console.error(error);
+      if (editingId) {
+        const res = await supabase
+          .from("listings")
+          .update(payload)
+          .eq("id", editingId)
+          .select()
+          .single();
+        data = res.data;
+        error = res.error;
+      } else {
+        const res = await supabase
+          .from("listings")
+          .insert(payload)
+          .select()
+          .single();
+        data = res.data;
+        error = res.error;
+      }
+
+      if (error) {
+        console.error(error);
+        setErrorMsg("Could not save item.");
+        setIsSaving(false);
+        return;
+      }
+
+      const savedId = data.id;
+      setItemNumber(savedId);
+      setEditingId(savedId);
+
+      setSuccessMsg(
+        listForSale
+          ? "Item added and marked ready to sell."
+          : "Item saved to inventory."
+      );
+
+      await loadInventory();
+    } catch (err) {
+      console.error(err);
       setErrorMsg("Could not save item.");
+    } finally {
       setIsSaving(false);
-      return;
     }
-
-    setSuccessMsg(
-      listForSale
-        ? "Item added and marked ready to sell."
-        : "Item saved to inventory."
-    );
-
-    // Reset form
-    setItemNumber("");
-    setBrand("");
-    setModel("");
-    setCategory("");
-    setColor("");
-    setMaterial("");
-    setCondition("");
-    setGradingNotes("");
-    setCurrency("USD");
-    setCost("");
-    setListingPrice("");
-    setCuratorNarrative("");
-    setDimensions({ length: "", height: "", depth: "", strap_drop: "" });
-    setIncludedText("");
-    setPricingPreview({
-      retail_price: null,
-      comp_low: null,
-      comp_high: null,
-      recommended_listing: null,
-      whatnot_start: null,
-      sources: [],
-    });
-    setAiData(null);
-    setImages(Array(10).fill(null));
-    setListForSale(false);
-
-    await loadInventory();
-
-    setIsSaving(false);
   }
 
-  // ---------- INVENTORY DERIVED DATA ----------
   const latestFive = userInventory.slice(0, 5);
 
   const filteredInventory = userInventory.filter((item) => {
@@ -888,18 +851,27 @@ export default function IntakePage() {
     }
     if (!term) return true;
 
-    const sku = (item.item_number || item.sku || "").toLowerCase();
+    const sku = (item.id || "").toLowerCase();
     const b = (item.brand || "").toLowerCase();
     const m = (item.model || "").toLowerCase();
+    const desc = (item.description || "").toLowerCase();
+    const inc = Array.isArray(item.included_items)
+      ? item.included_items.join(" ").toLowerCase()
+      : "";
+    const kw = Array.isArray(item.search_keywords)
+      ? item.search_keywords.join(" ").toLowerCase()
+      : "";
 
     return (
       sku.includes(term) ||
       b.includes(term) ||
-      m.includes(term)
+      m.includes(term) ||
+      desc.includes(term) ||
+      inc.includes(term) ||
+      kw.includes(term)
     );
   });
 
-  // ---------- RENDER ----------
   return (
     <div
       style={{
@@ -912,17 +884,16 @@ export default function IntakePage() {
           "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      {/* HEADER */}
       <div
         style={{
           maxWidth: "1180px",
           margin: "0 auto 16px auto",
           padding: "18px 24px 16px 24px",
           borderRadius: "20px",
-          border: "1px solid rgba(212,175,55,0.35)", // soft gold edge
+          border: "1px solid rgba(212,175,55,0.35)",
           background: "linear-gradient(135deg, #ffffff, #f9fafb)",
           boxShadow:
-            "0 8px 22px rgba(15,23,42,0.10), 0 0 14px rgba(56,189,248,0.16)", // subtle blue glow
+            "0 8px 22px rgba(15,23,42,0.10), 0 0 14px rgba(56,189,248,0.16)",
         }}
       >
         <div
@@ -933,7 +904,6 @@ export default function IntakePage() {
             gap: "24px",
           }}
         >
-          {/* Logo + Title (luxury left stack) */}
           <div
             style={{
               display: "flex",
@@ -943,7 +913,6 @@ export default function IntakePage() {
               minWidth: 0,
             }}
           >
-            {/* Logo */}
             <img
               src="/emz-loveluxury-logo-horizontal.png"
               alt="EMZLoveLuxury"
@@ -953,8 +922,6 @@ export default function IntakePage() {
                 display: "block",
               }}
             />
-
-            {/* Title + accent line */}
             <div
               style={{
                 display: "flex",
@@ -997,8 +964,6 @@ export default function IntakePage() {
                   Cataloging and Intake System
                 </span>
               </h1>
-
-              {/* Gold accent underline */}
               <div
                 style={{
                   height: "2px",
@@ -1012,8 +977,6 @@ export default function IntakePage() {
               />
             </div>
           </div>
-
-          {/* AI Upgrade Badge */}
           <div
             style={{
               flexShrink: 0,
@@ -1032,7 +995,7 @@ export default function IntakePage() {
                 background: "rgba(255,251,235,0.9)",
                 color: "#7a5f1a",
                 fontWeight: 600,
-                cursor: "pointer",
+                cursor: "default",
                 whiteSpace: "nowrap",
                 boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
                 backdropFilter: "blur(3px)",
@@ -1043,7 +1006,6 @@ export default function IntakePage() {
           </div>
         </div>
 
-        {/* Error / success messages */}
         {errorMsg && (
           <p
             style={{
@@ -1069,7 +1031,6 @@ export default function IntakePage() {
           </p>
         )}
 
-        {/* Divider line under header */}
         <div
           style={{
             marginTop: "10px",
@@ -1078,7 +1039,6 @@ export default function IntakePage() {
         />
       </div>
 
-      {/* ITEM CONTROL BAR – full width under header */}
       <div
         style={{
           maxWidth: "1180px",
@@ -1097,13 +1057,13 @@ export default function IntakePage() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: "11px", color: "#9ca3af" }}>
-            Item #
+            Item ID
           </span>
           <input
             type="text"
             value={itemNumber}
-            onChange={(e) => setItemNumber(e.target.value)}
-            placeholder="Auto-generated on first photo / AI"
+            readOnly
+            placeholder="Generated when saved"
             style={{
               padding: "4px 10px",
               fontSize: "11px",
@@ -1111,7 +1071,7 @@ export default function IntakePage() {
               border: "1px solid #1f2937",
               background: "#020617",
               color: "#e5e7eb",
-              minWidth: "190px",
+              minWidth: "230px",
               textAlign: "center",
             }}
           />
@@ -1157,7 +1117,6 @@ export default function IntakePage() {
         </div>
       </div>
 
-      {/* MAIN 2-COLUMN GRID */}
       <div
         style={{
           maxWidth: "1180px",
@@ -1168,7 +1127,6 @@ export default function IntakePage() {
           alignItems: "flex-start",
         }}
       >
-        {/* LEFT COLUMN – Photos + Currency + Cost + Condition + AI Button */}
         <section
           style={{
             background: "rgba(15,23,42,0.96)",
@@ -1180,7 +1138,6 @@ export default function IntakePage() {
             maxWidth: "420px",
           }}
         >
-          {/* PHOTOS & CONDITION CARD */}
           <div
             style={{
               background:
@@ -1193,7 +1150,6 @@ export default function IntakePage() {
               marginBottom: "12px",
             }}
           >
-            {/* Top title bar */}
             <div
               style={{
                 display: "flex",
@@ -1224,8 +1180,6 @@ export default function IntakePage() {
                 </div>
               </div>
             </div>
-
-            {/* Thin bar under header */}
             <div
               style={{
                 height: "1px",
@@ -1234,8 +1188,6 @@ export default function IntakePage() {
                 marginBottom: "10px",
               }}
             />
-
-            {/* MAIN LISTING PHOTO (slot 0) */}
             <div style={{ marginBottom: "12px" }}>
               <div
                 onClick={handleListingPhotoClick}
@@ -1271,7 +1223,6 @@ export default function IntakePage() {
               >
                 {images[0] && images[0].url ? (
                   <>
-                    {/* When user has uploaded a listing photo, fill the whole box */}
                     <img
                       src={images[0].url}
                       alt="Listing photo"
@@ -1298,7 +1249,6 @@ export default function IntakePage() {
                   </>
                 ) : (
                   <>
-                    {/* EMZ blue-heart-on-gold background is already set via CSS */}
                     <span
                       style={{
                         position: "absolute",
@@ -1322,8 +1272,6 @@ export default function IntakePage() {
                 )}
               </div>
             </div>
-
-            {/* Thin bar between main & additional */}
             <div
               style={{
                 height: "1px",
@@ -1332,8 +1280,6 @@ export default function IntakePage() {
                 margin: "8px 0 10px 0",
               }}
             />
-
-            {/* ADDITIONAL PHOTOS HEADER + BUTTON */}
             <div
               style={{
                 display: "flex",
@@ -1373,8 +1319,6 @@ export default function IntakePage() {
                 Add Additional Photos (up to 9)
               </button>
             </div>
-
-            {/* THUMBNAIL GRID – only shown when there ARE additional photos */}
             {images.some((img, idx) => idx > 0 && img) && (
               <div
                 style={{
@@ -1392,7 +1336,7 @@ export default function IntakePage() {
                         onClick={() => handleReplaceImage(idx)}
                         style={{
                           position: "relative",
-                          flex: "0 0 calc((100% - 16px) / 3)", // 3 across
+                          flex: "0 0 calc((100% - 16px) / 3)",
                           aspectRatio: "4 / 3",
                           borderRadius: "12px",
                           overflow: "hidden",
@@ -1432,7 +1376,6 @@ export default function IntakePage() {
             )}
           </div>
 
-          {/* Currency */}
           <label style={labelStyle}>Currency</label>
           <select
             value={currency}
@@ -1455,7 +1398,6 @@ export default function IntakePage() {
             can normalize to USD later.
           </p>
 
-          {/* Cost */}
           <label style={labelStyle}>
             Cost (Your Buy-In, {currency})
           </label>
@@ -1467,7 +1409,6 @@ export default function IntakePage() {
             placeholder="e.g. 350"
           />
 
-          {/* Condition & notes */}
           <label style={labelStyle}>Condition Grade (required)</label>
           <select
             value={condition}
@@ -1504,7 +1445,6 @@ export default function IntakePage() {
             placeholder="Corner wear, hardware scratches, interior marks, odor notes, etc."
           />
 
-          {/* Run AI button */}
           <button
             type="button"
             onClick={runAI}
@@ -1539,7 +1479,6 @@ export default function IntakePage() {
           </p>
         </section>
 
-        {/* RIGHT COLUMN – EMZCurator Description + Pricing + Inclusions */}
         <section
           style={{
             display: "flex",
@@ -1547,7 +1486,6 @@ export default function IntakePage() {
             gap: "12px",
           }}
         >
-          {/* EMZCurator Description Hero (Print Card & Tags) */}
           <div
             style={{
               background:
@@ -1578,8 +1516,6 @@ export default function IntakePage() {
               >
                 EMZCurator Description
               </h2>
-
-              {/* ------- PRINT CARD & TAGS BUTTON ------- */}
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <span
                   style={{
@@ -1593,7 +1529,6 @@ export default function IntakePage() {
                 >
                   Print Card Text
                 </span>
-
                 <button
                   type="button"
                   onClick={handlePrintCard}
@@ -1611,8 +1546,6 @@ export default function IntakePage() {
                 </button>
               </div>
             </div>
-
-            {/* ------- CURATOR TEXTAREA ------- */}
             <textarea
               ref={narrativeRef}
               value={curatorNarrative}
@@ -1632,8 +1565,6 @@ export default function IntakePage() {
                 "When you run EMZCurator AI, a complete description appears here: item number, identity, measurements, features, market note, comps, and the final sales-forward narration."
               }
             />
-
-            {/* ------- INFO ABOUT PRINT & TAGS ------- */}
             <p
               style={{
                 fontSize: "10px",
@@ -1648,7 +1579,6 @@ export default function IntakePage() {
             </p>
           </div>
 
-          {/* Pricing & Status Card (Listing Price + AI Preview) */}
           <div
             style={{
               background: "rgba(15,23,42,0.96)",
@@ -1669,7 +1599,6 @@ export default function IntakePage() {
             >
               Pricing & Status
             </h2>
-
             <label style={labelStyle}>
               Set Listing Price ({currency})
             </label>
@@ -1680,7 +1609,6 @@ export default function IntakePage() {
               style={inputStyle}
               placeholder="EMZCurator suggestion or your own"
             />
-
             <div
               style={{
                 marginTop: "10px",
@@ -1759,7 +1687,6 @@ export default function IntakePage() {
             </div>
           </div>
 
-          {/* Inclusions */}
           <div
             style={{
               background: "rgba(15,23,42,0.96)",
@@ -1803,10 +1730,50 @@ export default function IntakePage() {
               placeholder={"Dust bag\nCrossbody strap\nBox"}
             />
           </div>
+
+          <div
+            style={{
+              background: "rgba(15,23,42,0.96)",
+              borderRadius: "16px",
+              border: "1px solid #1f2937",
+              padding: "12px",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "12px",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.14em",
+                color: "#93c5fd",
+                marginBottom: "8px",
+              }}
+            >
+              Hashtags / Search Keywords
+            </h2>
+            <p
+              style={{
+                fontSize: "11px",
+                color: "#9ca3af",
+                marginBottom: "4px",
+              }}
+            >
+              Review and edit any AI-generated keywords. Separate with commas or
+              line breaks. These help your internal search and future SEO.
+            </p>
+            <textarea
+              value={keywordsText}
+              onChange={(e) => setKeywordsText(e.target.value)}
+              style={{
+                ...inputStyle,
+                minHeight: "70px",
+              }}
+              placeholder="louis vuitton, mono, zippy wallet, crossbody, chain strap, gold hardware"
+            />
+          </div>
         </section>
       </div>
 
-      {/* INVENTORY SUMMARY */}
       <div
         style={{
           maxWidth: "1180px",
@@ -1829,7 +1796,6 @@ export default function IntakePage() {
           </p>
         ) : (
           <>
-            {/* Latest 5 as thumbnail cards */}
             <p
               style={{
                 fontSize: "11px",
@@ -1857,6 +1823,7 @@ export default function IntakePage() {
                 return (
                   <div
                     key={item.id}
+                    onClick={() => router.push(`/intake?item=${item.id}`)}
                     style={{
                       flex: "0 0 min(180px, 100%)",
                       borderRadius: "10px",
@@ -1864,6 +1831,7 @@ export default function IntakePage() {
                       border: "1px solid #111827",
                       background: "#020617",
                       boxShadow: "0 8px 20px rgba(0,0,0,0.6)",
+                      cursor: "pointer",
                     }}
                   >
                     <div
@@ -1908,7 +1876,7 @@ export default function IntakePage() {
                           marginBottom: "2px",
                         }}
                       >
-                        {item.item_number || item.sku || "—"}
+                        {item.id || "—"}
                       </div>
                       <div
                         style={{
@@ -1947,7 +1915,6 @@ export default function IntakePage() {
               })}
             </div>
 
-            {/* Search + filter over full inventory */}
             <div
               style={{
                 display: "flex",
@@ -1960,7 +1927,7 @@ export default function IntakePage() {
                 type="text"
                 value={inventorySearch}
                 onChange={(e) => setInventorySearch(e.target.value)}
-                placeholder="Search by SKU, brand, or model…"
+                placeholder="Search by ID, brand, model, or keywords…"
                 style={{
                   ...inputStyle,
                   marginBottom: 0,
@@ -2015,7 +1982,7 @@ export default function IntakePage() {
                         fontWeight: 600,
                       }}
                     >
-                      SKU
+                      ID
                     </th>
                     <th
                       style={{
@@ -2053,10 +2020,12 @@ export default function IntakePage() {
                       style={{
                         borderBottom: "1px solid #020617",
                         background: "#020617",
+                        cursor: "pointer",
                       }}
+                      onClick={() => router.push(`/intake?item=${item.id}`)}
                     >
                       <td style={{ padding: "4px 8px" }}>
-                        {item.item_number || item.sku || "—"}
+                        {item.id || "—"}
                       </td>
                       <td style={{ padding: "4px 8px" }}>
                         {item.brand || "—"}
@@ -2086,7 +2055,6 @@ export default function IntakePage() {
         </p>
       </div>
 
-      {/* COMPARABLE LISTINGS MODAL */}
       {showCompsModal && (
         <div style={modalBackdropStyle}>
           <div style={modalWindowStyle}>
@@ -2184,9 +2152,6 @@ export default function IntakePage() {
   );
 }
 
-// ---------- HELPERS ----------
-
-// Build one unified narrative that includes ALL facts
 function buildCuratorNarrative({ aiResult, override }) {
   if (!aiResult) return "";
 
@@ -2210,7 +2175,6 @@ function buildCuratorNarrative({ aiResult, override }) {
 
   const gradingNotes = override.gradingNotes || "";
 
-  // measurements line
   const measurementsParts = [];
   if (dims.length) measurementsParts.push(`L: ${dims.length}`);
   if (dims.height) measurementsParts.push(`H: ${dims.height}`);
@@ -2220,12 +2184,10 @@ function buildCuratorNarrative({ aiResult, override }) {
 
   const lines = [];
 
-  // Item number first for print card lookup
   if (itemNumber) {
     lines.push(`Item #: ${itemNumber}`);
   }
 
-  // Header / identity
   if (brand || model) {
     lines.push(`Brand / Model: ${[brand, model].filter(Boolean).join(" · ")}`);
   }
@@ -2248,14 +2210,12 @@ function buildCuratorNarrative({ aiResult, override }) {
     lines.push(`Condition Notes: ${gradingNotes}`);
   }
 
-  // Measurements
   if (measurementsLine) {
     lines.push("");
     lines.push("Typical Measurements:");
     lines.push(measurementsLine);
   }
 
-  // Key features
   if (featureBullets.length > 0) {
     lines.push("");
     lines.push("Key Features:");
@@ -2264,7 +2224,6 @@ function buildCuratorNarrative({ aiResult, override }) {
     });
   }
 
-  // Availability / market note
   const rarityLine =
     availability.market_rarity || aiResult.included_items_notes || "";
   if (rarityLine) {
@@ -2273,7 +2232,6 @@ function buildCuratorNarrative({ aiResult, override }) {
     lines.push(rarityLine);
   }
 
-  // Pricing insight
   if (pricing.comp_low || pricing.comp_high) {
     const low = pricing.comp_low ?? "";
     const high = pricing.comp_high ?? "";
@@ -2286,7 +2244,6 @@ function buildCuratorNarrative({ aiResult, override }) {
     lines.push(`Original retail (approx.): ${pricing.retail_price}`);
   }
 
-  // Sales-forward description
   if (description.sales_forward) {
     lines.push("");
     lines.push("—");
@@ -2294,7 +2251,6 @@ function buildCuratorNarrative({ aiResult, override }) {
     lines.push(description.sales_forward);
   }
 
-  // Extra model / history / style notes if present
   if (description.model_notes || description.history || description.styling) {
     lines.push("");
     lines.push("—");
@@ -2331,7 +2287,6 @@ function buildSearchKeywords({ identity, narrative, includedItems }) {
   return Array.from(keywords);
 }
 
-// ---------- STYLE HELPERS ----------
 const inputStyle = {
   width: "100%",
   padding: "6px 8px",
