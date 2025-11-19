@@ -982,6 +982,379 @@ function IntakePageInner() {
       alert("Popup blocked. Please allow popups for this site to print.");
     }
   }
+  function handlePrintCard() {
+    const safeItemNumber = itemNumber || "(not assigned yet)";
+
+    // -------------- build the main card text --------------
+    const lines = [];
+
+    // Basic identity
+    lines.push(`Item #: ${safeItemNumber}`);
+    if (brand || model) {
+      lines.push(
+        `Brand / Model: ${[brand, model].filter(Boolean).join(" · ")}`
+      );
+    }
+    if (category) lines.push(`Category: ${category}`);
+    if (color) lines.push(`Color: ${color}`);
+    if (material) lines.push(`Material: ${material}`);
+    if (condition) lines.push(`Condition Grade: ${condition}`);
+    if (gradingNotes) lines.push(`Condition Notes: ${gradingNotes}`);
+
+    // Measurements
+    const dimsParts = [];
+    if (dimensions.length) dimsParts.push(`L: ${dimensions.length}`);
+    if (dimensions.height) dimsParts.push(`H: ${dimensions.height}`);
+    if (dimensions.depth) dimsParts.push(`D: ${dimensions.depth}`);
+    if (dimensions.strap_drop) {
+      dimsParts.push(`Strap Drop: ${dimensions.strap_drop}`);
+    }
+    if (dimsParts.length > 0) {
+      lines.push("");
+      lines.push("Typical Measurements:");
+      lines.push(dimsParts.join(" · "));
+    }
+
+    // EMZCurator Description
+    lines.push("");
+    lines.push("EMZCurator Description:");
+    lines.push(curatorNarrative || "");
+
+    // Comparable sales & pricing
+    lines.push("");
+    lines.push("Comparable Sales & Price Insight:");
+    if (pricingPreview.retail_price) {
+      lines.push(
+        `Retail (approx., often USD): ${pricingPreview.retail_price}`
+      );
+    }
+    if (pricingPreview.comp_low) {
+      lines.push(`Comp Low: ${pricingPreview.comp_low}`);
+    }
+    if (pricingPreview.comp_high) {
+      lines.push(`Comp High: ${pricingPreview.comp_high}`);
+    }
+    if (pricingPreview.recommended_listing) {
+      lines.push(
+        `Recommended Listing: ${pricingPreview.recommended_listing}`
+      );
+    }
+    if (pricingPreview.whatnot_start) {
+      lines.push(
+        `Suggested Whatnot Start: ${pricingPreview.whatnot_start}`
+      );
+    }
+    if (
+      !pricingPreview.retail_price &&
+      !pricingPreview.comp_low &&
+      !pricingPreview.comp_high &&
+      !pricingPreview.recommended_listing &&
+      !pricingPreview.whatnot_start
+    ) {
+      lines.push(
+        "Run EMZCurator AI and reprint this card to include comparable sales."
+      );
+    }
+
+    // Inclusions
+    lines.push("");
+    lines.push("Inclusions:");
+    const incBoxes = [];
+    if (includedItems.dust_bag) incBoxes.push("☑ Dust bag");
+    if (includedItems.box) incBoxes.push("☑ Box");
+    if (includedItems.strap) incBoxes.push("☑ Strap");
+    if (includedItems.auth_card) incBoxes.push("☑ Auth card");
+    if (includedItems.tags) incBoxes.push("☑ Tags");
+    if (includedItems.lock_and_key) incBoxes.push("☑ Lock & key set");
+
+    const freeformLines = (includedFreeform || "")
+      .split("\n")
+      .map((x) => x.trim())
+      .filter((x) => x.length > 0);
+
+    incBoxes.push(...freeformLines.map((x) => `• ${x}`));
+
+    if (incBoxes.length === 0) {
+      lines.push("No inclusions recorded.");
+    } else {
+      lines.push(...incBoxes);
+    }
+
+    // -------------- prepare safe text for HTML --------------
+    const cardText = escapeHtml(lines.join("\n"));
+    const safeBrand = escapeHtml(brand || "");
+    const safeModel = escapeHtml(model || "");
+    const safeCategory = escapeHtml(category || "");
+    const safeColor = escapeHtml(color || "");
+    const safeMaterial = escapeHtml(material || "");
+    const safeCondition = escapeHtml(condition || "");
+    const safeNotes = escapeHtml(gradingNotes || "");
+
+    // -------------- figure out URLs for QR + barcode + logo --------------
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://emzloveluxury.com";
+
+    const itemPathId =
+      itemNumber && itemNumber !== "(not assigned yet)"
+        ? itemNumber
+        : "pending";
+
+    // Future Phase 3: this will match the actual item detail route
+    const itemUrl = `${origin}/item/${encodeURIComponent(itemPathId)}`;
+
+    const logoUrl = `${origin}/emz-loveluxury-logo-horizontal.png`;
+
+    // Simple free QR code + barcode services (runtime HTTP image fetch at print time)
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
+      itemUrl
+    )}&size=200x200&margin=0`;
+
+    const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(
+      itemPathId
+    )}&scale=2&includetext&background=ffffff`;
+
+    // -------------- build full 8.5x11 card + tag HTML --------------
+    const html = `
+      <html>
+        <head>
+          <title>EMZLoveLuxury Print Card — ${escapeHtml(
+            safeItemNumber
+          )}</title>
+          <style>
+            @page {
+              size: Letter;
+              margin: 0.5in;
+            }
+            * {
+              box-sizing: border-box;
+            }
+            body {
+              margin: 0;
+              font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+              background: #f3f4f6;
+              color: #111827;
+            }
+            .page {
+              width: 100%;
+              max-width: 8.5in;
+              margin: 0 auto;
+            }
+            .card {
+              border-radius: 16px;
+              border: 1px solid #d4af37;
+              background: #ffffff;
+              padding: 16px 18px;
+              box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+            }
+            .card-header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 16px;
+              margin-bottom: 8px;
+            }
+            .logo {
+              height: 40px;
+              width: auto;
+            }
+            .card-id {
+              text-align: right;
+              font-size: 12px;
+              color: #4b5563;
+            }
+            .card-id strong {
+              display: block;
+              font-size: 14px;
+              color: #111827;
+            }
+            .card-body {
+              display: grid;
+              grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr);
+              gap: 16px;
+              margin-top: 8px;
+            }
+            .card-section-title {
+              font-size: 12px;
+              text-transform: uppercase;
+              letter-spacing: 0.14em;
+              color: #6b7280;
+              margin-bottom: 4px;
+            }
+            .meta-list {
+              font-size: 12px;
+              line-height: 1.5;
+            }
+            .meta-list div {
+              margin-bottom: 2px;
+            }
+            .meta-label {
+              font-weight: 600;
+            }
+            .narrative-box {
+              border-radius: 10px;
+              border: 1px solid #e5e7eb;
+              background: #f9fafb;
+              padding: 8px;
+              font-size: 11px;
+            }
+            .narrative-box pre {
+              margin: 0;
+              white-space: pre-wrap;
+              word-wrap: break-word;
+              font-family: inherit;
+              font-size: 11px;
+              line-height: 1.45;
+            }
+            .cutline {
+              margin-top: 16px;
+              border-top: 1px dashed #9ca3af;
+              text-align: center;
+              font-size: 10px;
+              color: #6b7280;
+              padding-top: 4px;
+            }
+            .tag-strip {
+              margin-top: 8px;
+              border-radius: 10px;
+              border: 1px solid #111827;
+              background: #ffffff;
+              display: flex;
+              overflow: hidden;
+            }
+            .tag-side {
+              flex: 1;
+              padding: 8px;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: space-between;
+              min-height: 120px;
+            }
+            .tag-side + .tag-side {
+              border-left: 1px dashed #9ca3af;
+            }
+            .tag-logo {
+              height: 28px;
+              width: auto;
+              margin-bottom: 4px;
+            }
+            .tag-middle-text {
+              font-size: 10px;
+              text-transform: uppercase;
+              letter-spacing: 0.12em;
+              color: #4b5563;
+              margin-bottom: 4px;
+            }
+            .tag-id {
+              font-size: 11px;
+              font-weight: 600;
+              color: #111827;
+              margin-top: 4px;
+            }
+            .qr-img, .barcode-img {
+              max-height: 80px;
+              max-width: 100%;
+              display: block;
+            }
+            .tag-footnote {
+              margin-top: 4px;
+              font-size: 9px;
+              color: #6b7280;
+              text-align: center;
+            }
+            .fold-note {
+              font-size: 9px;
+              color: #6b7280;
+              text-align: center;
+              margin-top: 2px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="page">
+            <div class="card">
+              <div class="card-header">
+                <img src="${logoUrl}" class="logo" alt="EMZLoveLuxury" />
+                <div class="card-id">
+                  <span>Item ID / SKU</span>
+                  <strong>${escapeHtml(safeItemNumber)}</strong>
+                  <span>${safeBrand}${
+      safeModel ? " · " + safeModel : ""
+    }</span>
+                </div>
+              </div>
+              <div class="card-body">
+                <div>
+                  <div class="card-section-title">At-a-glance</div>
+                  <div class="meta-list">
+                    <div><span class="meta-label">Brand:</span> ${safeBrand || "—"}</div>
+                    <div><span class="meta-label">Model:</span> ${safeModel || "—"}</div>
+                    <div><span class="meta-label">Category:</span> ${safeCategory || "—"}</div>
+                    <div><span class="meta-label">Color:</span> ${safeColor || "—"}</div>
+                    <div><span class="meta-label">Material:</span> ${safeMaterial || "—"}</div>
+                    <div><span class="meta-label">Condition:</span> ${safeCondition || "—"}</div>
+                    <div><span class="meta-label">Notes:</span> ${
+                      safeNotes || "—"
+                    }</div>
+                    ${
+                      dimsParts.length > 0
+                        ? `<div style="margin-top:4px;"><span class="meta-label">Measurements:</span> ${escapeHtml(
+                            dimsParts.join(" · ")
+                          )}</div>`
+                        : ""
+                    }
+                    <div style="margin-top:6px;font-size:10px;color:#6b7280;">
+                      URL: ${escapeHtml(itemUrl)}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div class="card-section-title">EMZCurator Description &amp; Comps</div>
+                  <div class="narrative-box">
+                    <pre>${cardText}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="cutline">
+              CUT ALONG THIS LINE TO CREATE HANG TAG
+              <div class="fold-note">(Fold vertically between the two panels for front / back logo)</div>
+            </div>
+
+            <div class="tag-strip">
+              <div class="tag-side">
+                <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                <div class="tag-middle-text">Scan for item details</div>
+                <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
+                <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
+                <div class="tag-footnote">Attach to bag or place inside</div>
+              </div>
+              <div class="tag-side">
+                <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                <div class="tag-middle-text">Barcode for inventory</div>
+                <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
+                <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
+                <div class="tag-footnote">EMZ internal scan / future POS</div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    } else {
+      alert("Popup blocked. Please allow popups for this site to print.");
+    }
+  }
 
   const latestFive = userInventory.slice(0, 5);
 
