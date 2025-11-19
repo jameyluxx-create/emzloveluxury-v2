@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
 
@@ -68,7 +68,8 @@ const placeholderImages = [
   "/placeholders/Emzthumb-+AddAuthTags.png",
 ];
 
-export default function IntakePage() {
+function IntakePageInner() {
+
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -2330,3 +2331,28 @@ const modalWindowStyle = {
   boxShadow: "0 20px 60px rgba(0,0,0,0.95)",
   padding: "14px 16px 12px 16px",
 };
+
+export default function IntakePage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: "100vh",
+            background: "#020617",
+            color: "#e5e7eb",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily:
+              "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+          }}
+        >
+          Loading intake…
+        </div>
+      }
+    >
+      <IntakePageInner />
+    </Suspense>
+  );
+}
