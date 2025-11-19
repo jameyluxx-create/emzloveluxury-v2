@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
 
+// ---------- helper: resize image on client before upload ----------
 async function resizeImage(file, maxSize = 1200, quality = 0.8) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -51,12 +51,254 @@ async function resizeImage(file, maxSize = 1200, quality = 0.8) {
   });
 }
 
+// Escape HTML for print card
 function escapeHtml(str) {
   if (!str) return "";
   return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+// Convert brand string → code
+function brandCode(brand) {
+  if (!brand) return "BR-GEN";
+  const name = brand.toLowerCase();
+
+  if (name.includes("louis") || name.includes("lv")) return "LV";
+  if (name.includes("chanel")) return "CH";
+  if (name.includes("gucci")) return "GC";
+  if (name.includes("prada")) return "PR";
+  if (name.includes("miu")) return "MM";
+  if (name.includes("burberry")) return "BB";
+  if (name.includes("coach")) return "CHC";
+  if (name.includes("ferragamo")) return "FG";
+  if (name.includes("ysl") || name.includes("saint laurent"))
+    return "YSL";
+  if (name.includes("celine")) return "CL";
+
+  return "BR-GEN";
+}
+
+// Convert model string → code
+function modelCode(model) {
+  if (!model) return "GEN";
+  let normalized = model.toLowerCase();
+
+  if (normalized.includes("neverfull")) return "NVF";
+  if (normalized.includes("alma")) return "ALM";
+  if (normalized.includes("speedy")) return "SPD";
+  if (normalized.includes("passy")) return "PSY";
+  if (normalized.includes("pochette")) return "PCH";
+  if (normalized.includes("wallet")) return "WLT";
+  if (normalized.includes("zippy")) return "ZPY";
+
+  normalized = normalized.replace(/\W+/g, "").toUpperCase();
+  if (normalized.length >= 3) {
+    return normalized.slice(0, 3);
+  }
+  if (normalized.length === 2) {
+    return normalized + "X";
+  }
+  if (normalized.length === 1) {
+    return normalized + "XX";
+  }
+  return "GEN";
+}
+
+// Sequence number fetch (per brand+model)
+async function fetchNextSequence(supabaseClient, brandC, modelC) {
+  const compositePrefix = `${brandC}-${modelC}`;
+
+  const { data, error } = await supabaseClient
+    .from("sequence_counters")
+    .select("*")
+    .eq("prefix", compositePrefix)
+    .maybeSingle();
+
+  if (error && error.code !== "PGRST116") {
+    console.error("Error reading sequence_counters:", error);
+    throw error;
+  }
+
+  let nextValue = 1;
+  if (!data) {
+    const { data: inserted, error: insertErr } = await supabaseClient
+      .from("sequence_counters")
+      .insert({ prefix: compositePrefix, last_value: 1 })
+      .select()
+      .single();
+
+    if (insertErr) {
+      console.error("Error inserting new sequence prefix:", insertErr);
+      throw insertErr;
+    }
+    nextValue = inserted.last_value || 1;
+  } else {
+    nextValue = (data.last_value || 0) + 1;
+    const { error: updateErr } = await supabaseClient
+      .from("sequence_counters")
+      .update({ last_value: nextValue })
+      .eq("prefix", compositePrefix);
+
+    if (updateErr) {
+      console.error("Error updating sequence prefix:", updateErr);
+      throw updateErr;
+    }
+  }
+
+  const padded = String(nextValue).padStart(3, "0");
+  return padded;
+}
+
+// Model code mapping
+const MODEL_CODE_MAP = {
+  wallet: "WLT",
+  "zippy wallet": "ZPY",
+  "card holder": "CRD",
+  belt: "BEL",
+  "crossbody bag": "CRB",
+  "shoulder bag": "SHL",
+  "tote bag": "TOT",
+  "mini bag": "MIN",
+  clutch: "CLT",
+};
+
+// AI narrative builder
+function buildCuratorNarrative({ aiResult, override }) {
+  if (!aiResult) return "";
+
+  const identity = aiResult.identity || {};
+  const dims = aiResult.dimensions || {};
+  const description = aiResult.description || {};
+  const availability = aiResult.availability || {};
+  const pricing = aiResult.pricing || {};
+
+  const featureBullets = description.feature_bullets || [];
+
+  const itemNumber = override.itemNumber || "";
+
+  const brand = override.brand || identity.brand || "";
+  const model = override.model || identity.model || "";
+  const category =
+    override.category || identity.category_primary || identity.category || "";
+  const color = override.color || identity.color || "";
+  const material = override.material || identity.material || "";
+  const condition = override.condition || "";
+
+  const gradingNotes = override.gradingNotes || "";
+
+  const measurementsParts = [];
+  if (dims.length) measurementsParts.push(`L: ${dims.length}`);
+  if (dims.height) measurementsParts.push(`H: ${dims.height}`);
+  if (dims.depth) measurementsParts.push(`D: ${dims.depth}`);
+  const measurementsLine =
+    measurementsParts.length > 0 ? measurementsParts.join(" · ") : "";
+
+  const lines = [];
+
+  if (itemNumber) {
+    lines.push(`Item #: ${itemNumber}`);
+  }
+
+  if (brand || model) {
+    lines.push(`Brand / Model: ${[brand, model].filter(Boolean).join(" · ")}`);
+  }
+  if (category) {
+    lines.push(`Category: ${category}`);
+  }
+  if (color) {
+    lines.push(`Color: ${color}`);
+  }
+  if (material) {
+    lines.push(`Material: ${material}`);
+  }
+  if (identity.year_range) {
+    lines.push(`Production Range: ${identity.year_range}`);
+  }
+  if (condition) {
+    lines.push(`Condition Grade: ${condition}`);
+  }
+  if (gradingNotes) {
+    lines.push(`Condition Notes: ${gradingNotes}`);
+  }
+
+  if (measurementsLine) {
+    lines.push("");
+    lines.push("Typical Measurements:");
+    lines.push(measurementsLine);
+  }
+
+  if (featureBullets.length > 0) {
+    lines.push("");
+    lines.push("Key Features:");
+    featureBullets.forEach((feat) => {
+      lines.push(`• ${feat}`);
+    });
+  }
+
+  const rarityLine =
+    availability.market_rarity || aiResult.included_items_notes || "";
+  if (rarityLine) {
+    lines.push("");
+    lines.push("Market Note:");
+    lines.push(rarityLine);
+  }
+
+  if (pricing.comp_low || pricing.comp_high) {
+    const low = pricing.comp_low ?? "";
+    const high = pricing.comp_high ?? "";
+    lines.push("");
+    lines.push("Pricing Insight:");
+    lines.push(`Observed resale range: ${low} – ${high} (approx.)`);
+  }
+
+  if (pricing.retail_price) {
+    lines.push(`Original retail (approx.): ${pricing.retail_price}`);
+  }
+
+  if (description.sales_forward) {
+    lines.push("");
+    lines.push("—");
+    lines.push("Sales-Forward Description:");
+    lines.push(description.sales_forward);
+  }
+
+  if (description.model_notes || description.history || description.styling) {
+    lines.push("");
+    lines.push("—");
+    lines.push("Model Notes & Analysis:");
+    if (description.model_notes) lines.push(description.model_notes);
+    if (description.history) lines.push(description.history);
+    if (description.styling) lines.push(description.styling);
+  }
+
+  return lines.join("\n");
+}
+
+// Build search keywords (for future SEO & search)
+function buildSearchKeywords({ identity, narrative, includedItems }) {
+  const keywords = new Set();
+
+  if (identity.brand) keywords.add(identity.brand);
+  if (identity.model) keywords.add(identity.model);
+  if (identity.category_primary) keywords.add(identity.category_primary);
+  if (identity.color) keywords.add(identity.color);
+  if (identity.material) keywords.add(identity.material);
+
+  (includedItems || []).forEach((itm) => {
+    if (itm) keywords.add(itm);
+  });
+
+  if (narrative) {
+    narrative
+      .split(/[\s,./]+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length > 2)
+      .forEach((w) => keywords.add(w.toLowerCase()));
+  }
+
+  return Array.from(keywords);
 }
 
 const placeholderImages = [
@@ -68,32 +310,55 @@ const placeholderImages = [
   "/placeholders/Emzthumb-+AddAuthTags.png",
 ];
 
+// -------------------------- main component -------------------------
 function IntakePageInner() {
-
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
+  // User — we will later wire this to real auth
   const currentUserId = "demo-user-123";
 
+  // e.g. "LV-PASSY-EMZ-001"
   const [itemNumber, setItemNumber] = useState("");
-  const [editingId, setEditingId] = useState(null);
+  const [brandCodeState, setBrandCodeState] = useState("");
+  const [modelCodeState, setModelCodeState] = useState("");
+  const [sequenceNum, setSequenceNum] = useState("");
 
+  // Brand / model / identity
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [category, setCategory] = useState("");
   const [color, setColor] = useState("");
   const [material, setMaterial] = useState("");
 
+  // Condition
   const [condition, setCondition] = useState("");
   const [gradingNotes, setGradingNotes] = useState("");
 
+  // Currency & pricing
   const [currency, setCurrency] = useState("USD");
   const [cost, setCost] = useState("");
   const [listingPrice, setListingPrice] = useState("");
 
+  // Curator narrative
   const [curatorNarrative, setCuratorNarrative] = useState("");
-  const [includedText, setIncludedText] = useState("");
-  const [keywordsText, setKeywordsText] = useState("");
+
+  // Dimensions
+  const [dimensions, setDimensions] = useState({
+    length: "",
+    height: "",
+    depth: "",
+    strap_drop: "",
+  });
+
+  // Inclusions
+  const [includedItems, setIncludedItems] = useState({
+    dust_bag: false,
+    box: false,
+    strap: false,
+    auth_card: false,
+    tags: false,
+    lock_and_key: false,
+    extras: [],
+  });
+  const [includedFreeform, setIncludedFreeform] = useState("");
 
   const [pricingPreview, setPricingPreview] = useState({
     retail_price: null,
@@ -104,16 +369,13 @@ function IntakePageInner() {
     sources: [],
   });
 
+  // AI data
   const [aiData, setAiData] = useState(null);
-  const [dimensions, setDimensions] = useState({
-    length: "",
-    height: "",
-    depth: "",
-    strap_drop: "",
-  });
 
+  // listing vs intake status
   const [listForSale, setListForSale] = useState(false);
 
+  // Listing photos
   const [images, setImages] = useState(Array(10).fill(null));
 
   const [isSaving, setIsSaving] = useState(false);
@@ -125,11 +387,10 @@ function IntakePageInner() {
   const [globalInventory, setGlobalInventory] = useState([]);
 
   const [inventorySearch, setInventorySearch] = useState("");
-  const [inventoryStatusFilter, setInventoryStatusFilter] = useState("all");
+  const [inventoryStatusFilter, setInventoryStatusFilter] =
+    useState("all");
 
   const [showCompsModal, setShowCompsModal] = useState(false);
-
-  const [initialItemLoaded, setInitialItemLoaded] = useState(false);
 
   const narrativeRef = useRef(null);
   const includedRef = useRef(null);
@@ -137,13 +398,6 @@ function IntakePageInner() {
   useEffect(() => {
     loadInventory();
   }, []);
-
-  useEffect(() => {
-    const itemId = searchParams.get("item");
-    if (itemId && !initialItemLoaded) {
-      loadItemById(itemId);
-    }
-  }, [searchParams, initialItemLoaded]);
 
   useEffect(() => {
     if (narrativeRef.current) {
@@ -159,7 +413,49 @@ function IntakePageInner() {
       el.style.height = "auto";
       el.style.height = el.scrollHeight + "px";
     }
-  }, [includedText]);
+  }, [includedFreeform]);
+
+  useEffect(() => {
+    if (!brand) {
+      setBrandCodeState("");
+      updateItemNumber("", modelCodeState, sequenceNum);
+      return;
+    }
+    const bc = brandCode(brand);
+    setBrandCodeState(bc);
+    updateItemNumber(bc, modelCodeState, sequenceNum);
+  }, [brand]);
+
+  useEffect(() => {
+    if (!model) {
+      setModelCodeState("");
+      updateItemNumber(brandCodeState, "", sequenceNum);
+      return;
+    }
+
+    const modelLower = model.toLowerCase().trim();
+    let selected = "";
+
+    let bestKey = "";
+    Object.keys(MODEL_CODE_MAP).forEach((key) => {
+      if (modelLower.includes(key) && key.length > bestKey.length) {
+        bestKey = key;
+      }
+    });
+
+    if (bestKey) {
+      selected = MODEL_CODE_MAP[bestKey];
+    } else {
+      selected = modelCode(model);
+    }
+
+    setModelCodeState(selected);
+    updateItemNumber(brandCodeState, selected, sequenceNum);
+  }, [model]);
+
+  useEffect(() => {
+    updateItemNumber(brandCodeState, modelCodeState, sequenceNum);
+  }, [sequenceNum]);
 
   async function loadInventory() {
     try {
@@ -181,83 +477,36 @@ function IntakePageInner() {
     }
   }
 
-  async function loadItemById(id) {
-    try {
-      const { data, error } = await supabase
-        .from("listings")
-        .select("*")
-        .eq("id", id)
-        .single();
+  function updateItemNumber(brandC, modelC, seq) {
+    const bc = brandC || "BR-GEN";
+    let mc = modelC || "GEN";
 
-      if (error) {
-        console.error("Error loading item by id", error);
-        return;
-      }
-
-      setEditingId(data.id);
-      setItemNumber(data.id || "");
-      setBrand(data.brand || "");
-      setModel(data.model || "");
-      setCategory(data.category || data.identity?.category_primary || "");
-      setColor(data.color || data.identity?.color || "");
-      setMaterial(data.material || data.identity?.material || "");
-      setCondition(data.condition || "");
-      setGradingNotes(data.condition_notes || "");
-      setCurrency(data.currency || "USD");
-      setCost(
-        data.cost !== null && data.cost !== undefined ? String(data.cost) : ""
-      );
-      setListingPrice(
-        data.listing_price !== null && data.listing_price !== undefined
-          ? String(data.listing_price)
-          : ""
-      );
-      setCuratorNarrative(data.description || "");
-      setDimensions(
-        data.dimensions || { length: "", height: "", depth: "", strap_drop: "" }
-      );
-      if (Array.isArray(data.included_items)) {
-        setIncludedText(data.included_items.join("\n"));
-      } else {
-        setIncludedText("");
-      }
-      if (Array.isArray(data.search_keywords)) {
-        setKeywordsText(data.search_keywords.join(", "));
-      } else {
-        setKeywordsText("");
-      }
-      if (data.pricing) {
-        setPricingPreview({
-          retail_price: data.pricing.retail_price || null,
-          comp_low: data.pricing.comp_low || null,
-          comp_high: data.pricing.comp_high || null,
-          recommended_listing: data.pricing.recommended_listing || null,
-          whatnot_start: data.pricing.whatnot_start || null,
-          sources: data.pricing.sources || [],
-        });
-      } else {
-        setPricingPreview({
-          retail_price: null,
-          comp_low: null,
-          comp_high: null,
-          recommended_listing: null,
-          whatnot_start: null,
-          sources: [],
-        });
-      }
-      if (Array.isArray(data.images)) {
-        setImages(data.images.concat(Array(10 - data.images.length).fill(null)));
-      } else {
-        setImages(Array(10).fill(null));
-      }
-      setListForSale(data.status === "ready_to_sell");
-      setInitialItemLoaded(true);
-    } catch (err) {
-      console.error("Error loading item by id", err);
+    if (!modelC && model) {
+      mc = modelCode(model);
     }
+
+    if (!seq) {
+      setItemNumber(`${bc}-${mc}`);
+      return;
+    }
+
+    setItemNumber(`${bc}-${mc}-EMZ-${seq}`);
   }
 
-  const handleReplaceImage = (slotIndex) => {
+  function handleListingPhotoClick() {
+    handleReplaceImage(0);
+  }
+
+  function handleAddAdditionalPhotosClick() {
+    const nextSlot = images.findIndex((img, idx) => idx > 0 && img === null);
+    if (nextSlot === -1) {
+      alert("You’ve reached the maximum of 9 additional photos.");
+      return;
+    }
+    handleReplaceImage(nextSlot);
+  }
+
+  function handleReplaceImage(slotIndex) {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -304,277 +553,27 @@ function IntakePageInner() {
     };
 
     input.click();
-  };
+  }
 
-  const handleListingPhotoClick = () => {
-    handleReplaceImage(0);
-  };
+  function handleIncludedToggle(key) {
+    setIncludedItems((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  }
 
-  const handleAddAdditionalPhotosClick = () => {
-    const nextSlot = images.findIndex((img, idx) => idx > 0 && img === null);
-    if (nextSlot === -1) {
-      alert("You’ve reached the maximum of 9 additional photos.");
-      return;
-    }
-    handleReplaceImage(nextSlot);
-  };
-
-  function handlePrintCard() {
-    if (!itemNumber) {
-      alert(
-        "Please save this item to inventory first so we can assign a permanent Item ID for the card and tags."
-      );
-      return;
-    }
-
-    const currentId = itemNumber;
-    const listingUrl = `https://emzloveluxury.com/item/${encodeURIComponent(
-      currentId
-    )}`;
-
-    const narrative = curatorNarrative || "";
-    const inclusionsRaw = includedText || "";
-
-    const compsLines = [];
-    if (pricingPreview.retail_price) {
-      compsLines.push(
-        `Retail (approx., often USD): ${pricingPreview.retail_price}`
-      );
-    }
-    if (pricingPreview.comp_low || pricingPreview.comp_high) {
-      const low = pricingPreview.comp_low || "";
-      const high = pricingPreview.comp_high || "";
-      compsLines.push(`Comparable range: ${low} – ${high}`.trim());
-    }
-    if (pricingPreview.recommended_listing) {
-      compsLines.push(
-        `Recommended listing: ${pricingPreview.recommended_listing}`
-      );
-    }
-    if (pricingPreview.whatnot_start) {
-      compsLines.push(
-        `Suggested Whatnot start: ${pricingPreview.whatnot_start}`
-      );
-    }
-    if (currency && listingPrice) {
-      compsLines.push(
-        `Planned listing price: ${currency} ${listingPrice}`.trim()
-      );
-    }
-    if (cost) {
-      compsLines.push(`Your cost basis: ${currency} ${cost}`);
-    }
-    if (
-      pricingPreview.sources &&
-      Array.isArray(pricingPreview.sources) &&
-      pricingPreview.sources.length > 0
-    ) {
-      compsLines.push("");
-      compsLines.push("Comparable listings:");
-      pricingPreview.sources.forEach((src) => {
-        if (typeof src === "string") {
-          compsLines.push(`• ${src}`);
-        } else {
-          try {
-            compsLines.push(`• ${JSON.stringify(src)}`);
-          } catch {}
-        }
-      });
-    }
-
-    const compsText =
-      compsLines.length > 0
-        ? compsLines.join("\n")
-        : "Run EMZCurator AI to pull recent comparable sales and suggested pricing.";
-
-    const brandLine = brand
-      ? `<div><strong>Brand:</strong> ${escapeHtml(brand)}</div>`
-      : "";
-    const modelLine = model
-      ? `<div><strong>Model:</strong> ${escapeHtml(model)}</div>`
-      : "";
-    const conditionLine = condition
-      ? `<div><strong>Condition:</strong> ${escapeHtml(condition)}</div>`
-      : "";
-
-    const win = window.open("", "_blank", "width=900,height=1100");
-    if (!win) return;
-
-    win.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <title>${escapeHtml(currentId)}</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      margin: 0;
-      padding: 24px;
-      background: #ffffff;
-      color: #111827;
-    }
-    .page {
-      width: 8.5in;
-      margin: 0 auto;
-    }
-    h1 {
-      font-size: 20px;
-      margin: 0 0 4px 0;
-      text-transform: uppercase;
-      letter-spacing: 0.18em;
-    }
-    h2 {
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      color: #4b5563;
-      margin: 16px 0 8px 0;
-    }
-    .meta {
-      font-size: 11px;
-      color: #374151;
-      margin-bottom: 12px;
-    }
-    .meta div {
-      margin-bottom: 2px;
-    }
-    pre {
-      white-space: pre-wrap;
-      font-size: 12px;
-      line-height: 1.4;
-      margin: 0;
-    }
-    .card-section {
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
-      padding: 12px;
-      margin-bottom: 12px;
-    }
-    .tag-strip-wrapper {
-      margin-top: 24px;
-      padding-top: 12px;
-      border-top: 1px dashed #9ca3af;
-    }
-    .cut-line {
-      text-align: center;
-      font-size: 10px;
-      color: #6b7280;
-      margin-bottom: 6px;
-    }
-    .tag-strip {
-      border: 1px solid #9ca3af;
-      border-radius: 8px;
-      padding: 8px;
-      display: flex;
-    }
-    .tag-half {
-      flex: 1;
-      padding: 4px 8px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
-    .tag-half + .tag-half {
-      border-left: 1px dotted #9ca3af;
-    }
-    .tag-logo {
-      max-width: 180px;
-      margin-bottom: 6px;
-    }
-    .sku-text {
-      font-size: 11px;
-      font-weight: 600;
-      margin-top: 4px;
-      letter-spacing: 0.12em;
-    }
-    #qr-code, #barcode {
-      background: #ffffff;
-      padding: 4px;
-      border-radius: 4px;
-    }
-    @media print {
-      body {
-        padding: 0.5in;
-      }
-      .page {
-        width: 100%;
+  function handleReadyToSellChange(e) {
+    const checked = e.target.checked;
+    if (checked) {
+      const priceNum = Number(listingPrice || 0);
+      if (!listingPrice || isNaN(priceNum) || priceNum <= 0) {
+        alert(
+          "Please Set Listing Price greater than zero before marking Ready to Sell."
+        );
+        return;
       }
     }
-  </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-</head>
-<body>
-  <div class="page">
-    <h1>EMZLove Luxury</h1>
-    <div class="meta">
-      <div><strong>Item ID:</strong> ${escapeHtml(currentId)}</div>
-      ${brandLine}
-      ${modelLine}
-      ${conditionLine}
-    </div>
-
-    <div class="card-section">
-      <h2>EMZCurator Description</h2>
-      <pre>${escapeHtml(narrative)}</pre>
-    </div>
-
-    <div class="card-section">
-      <h2>Comparable Sales & Pricing</h2>
-      <pre>${escapeHtml(compsText)}</pre>
-    </div>
-
-    <div class="card-section">
-      <h2>Inclusions</h2>
-      <pre>${escapeHtml(inclusionsRaw || "Dust bag / strap / box, etc.")}</pre>
-    </div>
-
-    <div class="tag-strip-wrapper">
-      <div class="cut-line">──────────── Cut along this line ────────────</div>
-      <div class="tag-strip">
-        <div class="tag-half">
-          <img src="/emz-scan-tag.png" alt="EMZLoveLuxury tag" class="tag-logo" />
-          <div id="qr-code"></div>
-          <div class="sku-text">${escapeHtml(currentId)}</div>
-        </div>
-        <div class="tag-half">
-          <img src="/emz-scan-tag.png" alt="EMZLoveLuxury tag" class="tag-logo" />
-          <svg id="barcode"></svg>
-          <div class="sku-text">${escapeHtml(currentId)}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    (function() {
-      var sku = "${escapeHtml(currentId)}";
-      var url = "${escapeHtml(listingUrl)}";
-      if (window.QRCode) {
-        new QRCode(document.getElementById("qr-code"), {
-          text: url,
-          width: 96,
-          height: 96
-        });
-      }
-      if (window.JsBarcode) {
-        JsBarcode("#barcode", sku, {
-          format: "CODE128",
-          lineColor: "#111827",
-          width: 1.4,
-          height: 40,
-          displayValue: false,
-          margin: 0
-        });
-      }
-    })();
-  </script>
-</body>
-</html>`);
-    win.document.close();
-    win.focus();
-    win.print();
+    setListForSale(checked);
   }
 
   async function runAI() {
@@ -639,7 +638,31 @@ function IntakePageInner() {
       }
 
       if (Array.isArray(data.included_items)) {
-        setIncludedText(data.included_items.join("\n"));
+        const updated = { ...includedItems };
+        const freeformExtras = [];
+
+        data.included_items.forEach((inc) => {
+          const normalized = inc.toLowerCase();
+          if (normalized.includes("dust")) updated.dust_bag = true;
+          else if (normalized.includes("box")) updated.box = true;
+          else if (normalized.includes("strap"))
+            updated.strap = true;
+          else if (normalized.includes("auth") || normalized.includes("card"))
+            updated.auth_card = true;
+          else if (normalized.includes("tag")) updated.tags = true;
+          else if (
+            normalized.includes("lock") ||
+            normalized.includes("key")
+          )
+            updated.lock_and_key = true;
+          else freeformExtras.push(inc);
+        });
+
+        updated.extras = freeformExtras;
+        setIncludedItems(updated);
+        if (freeformExtras.length > 0) {
+          setIncludedFreeform(freeformExtras.join("\n"));
+        }
       }
 
       if (data.pricing) {
@@ -653,11 +676,10 @@ function IntakePageInner() {
         });
       }
 
-      const currentId = itemNumber || "";
       const narrative = buildCuratorNarrative({
         aiResult: data,
         override: {
-          itemNumber: currentId,
+          itemNumber,
           brand,
           model,
           category,
@@ -672,9 +694,6 @@ function IntakePageInner() {
         setCuratorNarrative(narrative);
       }
 
-      const aiIncluded = Array.isArray(data.included_items)
-        ? data.included_items
-        : [];
       const identityForKeywords = {
         ...identity,
         brand: brand || identity.brand || null,
@@ -683,34 +702,22 @@ function IntakePageInner() {
         color: color || identity.color || null,
         material: material || identity.material || null,
       };
-      if (!keywordsText) {
-        const suggestedKeywords = buildSearchKeywords({
-          identity: identityForKeywords,
-          narrative: narrative,
-          includedItems: aiIncluded,
-        });
-        setKeywordsText(suggestedKeywords.join(", "));
-      }
+
+      const includedList = data.included_items || [];
+
+      const suggestedKeywords = buildSearchKeywords({
+        identity: identityForKeywords,
+        narrative: narrative,
+        includedItems: includedList,
+      });
+
+      console.log("Suggested keywords:", suggestedKeywords);
     } catch (err) {
       console.error(err);
       alert("EMZCurator AI lookup failed.");
     } finally {
       setIsAnalyzing(false);
     }
-  }
-
-  function handleReadyToSellChange(e) {
-    const checked = e.target.checked;
-    if (checked) {
-      const priceNum = Number(listingPrice || 0);
-      if (!listingPrice || isNaN(priceNum) || priceNum <= 0) {
-        alert(
-          "Please Set Listing Price greater than zero before marking Ready to Sell."
-        );
-        return;
-      }
-    }
-    setListForSale(checked);
   }
 
   async function handleSave() {
@@ -735,87 +742,89 @@ function IntakePageInner() {
       }
     }
 
-    const imagesPayload = images.filter((img) => img !== null);
+    try {
+      const brandC = brandCode(brand);
+      const modelC = modelCode(model);
+      const nextSequence = await fetchNextSequence(
+        supabase,
+        brandC,
+        modelC
+      );
 
-    const aiIdentity = aiData?.identity || {};
-    const identity = {
-      ...aiIdentity,
-      brand: brand || aiIdentity.brand || null,
-      model: model || aiIdentity.model || null,
-      category_primary: category || aiIdentity.category_primary || null,
-      color: color || aiIdentity.color || null,
-      material: material || aiIdentity.material || null,
-    };
+      setBrandCodeState(brandC);
+      setModelCodeState(modelC);
+      setSequenceNum(nextSequence);
 
-    const pricing = aiData?.pricing || null;
-    const seo = aiData?.seo
-      ? { ...aiData.seo, user_override: false }
-      : null;
+      const finalItemNumber = `${brandC}-${modelC}-EMZ-${nextSequence}`;
+      setItemNumber(finalItemNumber);
 
-    const includedItemsArray = includedText
-      .split("\n")
-      .map((x) => x.trim())
-      .filter((x) => x.length > 0);
+      const imagesPayload = images.filter((img) => img !== null);
+      const aiIdentity = aiData?.identity || {};
+      const identity = {
+        ...aiIdentity,
+        brand: brand || aiIdentity.brand || null,
+        model: model || aiIdentity.model || null,
+        category_primary: category || aiIdentity.category_primary || null,
+        color: color || aiIdentity.color || null,
+        material: material || aiIdentity.material || null,
+      };
+      const pricing = aiData?.pricing || null;
+      const seo = aiData?.seo
+        ? { ...aiData.seo, user_override: false }
+        : null;
 
-    let search_keywords;
-    if (keywordsText.trim()) {
-      search_keywords = keywordsText
-        .split(/[,\n]/)
+      const freeformLines = includedFreeform
+        .split("\n")
         .map((x) => x.trim())
         .filter((x) => x.length > 0);
-    } else {
-      search_keywords = buildSearchKeywords({
+
+      const compiledIncluded = [
+        includedItems.dust_bag ? "Dust bag" : null,
+        includedItems.box ? "Box" : null,
+        includedItems.strap ? "Strap" : null,
+        includedItems.auth_card ? "Authenticity card" : null,
+        includedItems.tags ? "Tags" : null,
+        includedItems.lock_and_key ? "Lock and key set" : null,
+        ...(includedItems.extras || []),
+        ...freeformLines,
+      ].filter(Boolean);
+
+      const search_keywords = buildSearchKeywords({
         identity,
         narrative: curatorNarrative,
-        includedItems: includedItemsArray,
+        includedItems: compiledIncluded,
       });
-    }
 
-    const payload = {
-      user_id: currentUserId,
-      brand: identity.brand,
-      model: identity.model,
-      category: identity.category_primary,
-      color: identity.color,
-      material: identity.material,
-      description: curatorNarrative || null,
-      condition,
-      condition_notes: gradingNotes || null,
-      currency,
-      cost: cost ? Number(cost) : null,
-      listing_price: listingPrice ? Number(listingPrice) : null,
-      images: imagesPayload,
-      identity,
-      dimensions,
-      included_items: includedItemsArray,
-      pricing,
-      seo,
-      search_keywords,
-      status: listForSale ? "ready_to_sell" : "intake",
-      is_public: listForSale,
-    };
+      const payload = {
+        user_id: currentUserId,
+        item_number: finalItemNumber,
+        brand: identity.brand,
+        model: identity.model,
+        category: identity.category_primary,
+        color: identity.color,
+        material: identity.material,
+        description: curatorNarrative || null,
+        condition,
+        condition_notes: gradingNotes || null,
+        currency,
+        cost: cost ? Number(cost) : null,
+        listing_price: listingPrice ? Number(listingPrice) : null,
+        images: imagesPayload,
+        identity,
+        dimensions,
+        included_items: compiledIncluded,
+        pricing,
+        seo,
+        search_keywords,
+        status: listForSale ? "ready_to_sell" : "intake",
+        is_public: listForSale,
+      };
 
-    try {
-      let data, error;
-
-      if (editingId) {
-        const res = await supabase
-          .from("listings")
-          .update(payload)
-          .eq("id", editingId)
-          .select()
-          .single();
-        data = res.data;
-        error = res.error;
-      } else {
-        const res = await supabase
-          .from("listings")
-          .insert(payload)
-          .select()
-          .single();
-        data = res.data;
-        error = res.error;
-      }
+      const { data, error } = await supabase
+        .from("listings")
+        .insert(payload)
+        .select()
+        .single();
 
       if (error) {
         console.error(error);
@@ -823,10 +832,6 @@ function IntakePageInner() {
         setIsSaving(false);
         return;
       }
-
-      const savedId = data.id;
-      setItemNumber(savedId);
-      setEditingId(savedId);
 
       setSuccessMsg(
         listForSale
@@ -848,28 +853,17 @@ function IntakePageInner() {
   const filteredInventory = userInventory.filter((item) => {
     const term = inventorySearch.trim().toLowerCase();
     if (inventoryStatusFilter !== "all") {
-      if ((item.status || "intake") !== inventoryStatusFilter) return false;
+      if ((item.status || "intake") !== inventoryStatusFilter)
+        return false;
     }
     if (!term) return true;
-
-    const sku = (item.id || "").toLowerCase();
+    const sku = (item.item_number || "").toLowerCase();
     const b = (item.brand || "").toLowerCase();
     const m = (item.model || "").toLowerCase();
-    const desc = (item.description || "").toLowerCase();
-    const inc = Array.isArray(item.included_items)
-      ? item.included_items.join(" ").toLowerCase()
-      : "";
-    const kw = Array.isArray(item.search_keywords)
-      ? item.search_keywords.join(" ").toLowerCase()
-      : "";
-
     return (
       sku.includes(term) ||
       b.includes(term) ||
-      m.includes(term) ||
-      desc.includes(term) ||
-      inc.includes(term) ||
-      kw.includes(term)
+      m.includes(term)
     );
   });
 
@@ -1058,13 +1052,13 @@ function IntakePageInner() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: "11px", color: "#9ca3af" }}>
-            Item ID
+            Item ID / SKU
           </span>
           <input
             type="text"
             value={itemNumber}
             readOnly
-            placeholder="Generated when saved"
+            placeholder="Generated when you save"
             style={{
               padding: "4px 10px",
               fontSize: "11px",
@@ -1097,7 +1091,7 @@ function IntakePageInner() {
               ? "Saving…"
               : listForSale
               ? "Save & Mark Ready to Sell"
-              : "Save to Inventory"}
+              : "Save to EMZ DB"}
           </button>
           <label
             style={{
@@ -1543,7 +1537,7 @@ function IntakePageInner() {
                     cursor: "pointer",
                   }}
                 >
-                  Print Card &amp; Tags
+                  Print Card and Tags
                 </button>
               </div>
             </div>
@@ -1573,10 +1567,10 @@ function IntakePageInner() {
                 marginTop: "6px",
               }}
             >
-              When you click <strong>Print Card &amp; Tags</strong>, the system
-              will generate the full 8.5×11 card with EMZCurator Description,
-              Comparable Sales, Inclusions, and a detachable foldable tag with
-              logo ×2, QR code, barcode, and the item ID.
+              When you click <strong>Print Card and Tags</strong>, the
+              system will generate the full 8.5×11 card with EMZCurator
+              Description, Comparable Sales, Inclusions, and a detachable
+              foldable tag with logo ×2, QR code, barcode, and the item ID.
             </p>
           </div>
 
@@ -1715,43 +1709,66 @@ function IntakePageInner() {
                 marginBottom: "4px",
               }}
             >
-              Add all items included here, one per line: dust bag, strap, box,
-              authenticity card, inserts, etc.
+              Check the standard items here, and add anything else in the
+              freeform box below.
             </p>
-            <textarea
-              ref={includedRef}
-              value={includedText}
-              onChange={(e) => setIncludedText(e.target.value)}
+            <div
               style={{
-                ...inputStyle,
-                minHeight: "80px",
-                resize: "none",
-                overflow: "hidden",
-              }}
-              placeholder={"Dust bag\nCrossbody strap\nBox"}
-            />
-          </div>
-
-          <div
-            style={{
-              background: "rgba(15,23,42,0.96)",
-              borderRadius: "16px",
-              border: "1px solid #1f2937",
-              padding: "12px",
-            }}
-          >
-            <h2
-              style={{
-                fontSize: "12px",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.14em",
-                color: "#93c5fd",
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: "4px",
                 marginBottom: "8px",
               }}
             >
-              Hashtags / Search Keywords
-            </h2>
+              <label style={checkLabelStyle}>
+                <input
+                  type="checkbox"
+                  checked={includedItems.dust_bag}
+                  onChange={() => handleIncludedToggle("dust_bag")}
+                />
+                Dust bag
+              </label>
+              <label style={checkLabelStyle}>
+                <input
+                  type="checkbox"
+                  checked={includedItems.box}
+                  onChange={() => handleIncludedToggle("box")}
+                />
+                Box
+              </label>
+              <label style={checkLabelStyle}>
+                <input
+                  type="checkbox"
+                  checked={includedItems.strap}
+                  onChange={() => handleIncludedToggle("strap")}
+                />
+                Strap
+              </label>
+              <label style={checkLabelStyle}>
+                <input
+                  type="checkbox"
+                  checked={includedItems.auth_card}
+                  onChange={() => handleIncludedToggle("auth_card")}
+                />
+                Auth card
+              </label>
+              <label style={checkLabelStyle}>
+                <input
+                  type="checkbox"
+                  checked={includedItems.tags}
+                  onChange={() => handleIncludedToggle("tags")}
+                />
+                Tags
+              </label>
+              <label style={checkLabelStyle}>
+                <input
+                  type="checkbox"
+                  checked={includedItems.lock_and_key}
+                  onChange={() => handleIncludedToggle("lock_and_key")}
+                />
+                Lock &amp; key
+              </label>
+            </div>
             <p
               style={{
                 fontSize: "11px",
@@ -1759,17 +1776,19 @@ function IntakePageInner() {
                 marginBottom: "4px",
               }}
             >
-              Review and edit any AI-generated keywords. Separate with commas or
-              line breaks. These help your internal search and future SEO.
+              Freeform extras (one per line):
             </p>
             <textarea
-              value={keywordsText}
-              onChange={(e) => setKeywordsText(e.target.value)}
+              ref={includedRef}
+              value={includedFreeform}
+              onChange={(e) => setIncludedFreeform(e.target.value)}
               style={{
                 ...inputStyle,
-                minHeight: "70px",
+                minHeight: "80px",
+                resize: "none",
+                overflow: "hidden",
               }}
-              placeholder="louis vuitton, mono, zippy wallet, crossbody, chain strap, gold hardware"
+              placeholder={"Extra chain strap\nOrganizer insert\nCharm or keyfob"}
             />
           </div>
         </section>
@@ -1824,7 +1843,6 @@ function IntakePageInner() {
                 return (
                   <div
                     key={item.id}
-                    onClick={() => router.push(`/intake?item=${item.id}`)}
                     style={{
                       flex: "0 0 min(180px, 100%)",
                       borderRadius: "10px",
@@ -1832,7 +1850,6 @@ function IntakePageInner() {
                       border: "1px solid #111827",
                       background: "#020617",
                       boxShadow: "0 8px 20px rgba(0,0,0,0.6)",
-                      cursor: "pointer",
                     }}
                   >
                     <div
@@ -1877,7 +1894,7 @@ function IntakePageInner() {
                           marginBottom: "2px",
                         }}
                       >
-                        {item.id || "—"}
+                        {item.item_number || "—"}
                       </div>
                       <div
                         style={{
@@ -1928,7 +1945,7 @@ function IntakePageInner() {
                 type="text"
                 value={inventorySearch}
                 onChange={(e) => setInventorySearch(e.target.value)}
-                placeholder="Search by ID, brand, model, or keywords…"
+                placeholder="Search by SKU, brand, or model…"
                 style={{
                   ...inputStyle,
                   marginBottom: 0,
@@ -1983,7 +2000,7 @@ function IntakePageInner() {
                         fontWeight: 600,
                       }}
                     >
-                      ID
+                      SKU
                     </th>
                     <th
                       style={{
@@ -2021,12 +2038,10 @@ function IntakePageInner() {
                       style={{
                         borderBottom: "1px solid #020617",
                         background: "#020617",
-                        cursor: "pointer",
                       }}
-                      onClick={() => router.push(`/intake?item=${item.id}`)}
                     >
                       <td style={{ padding: "4px 8px" }}>
-                        {item.id || "—"}
+                        {item.item_number || "—"}
                       </td>
                       <td style={{ padding: "4px 8px" }}>
                         {item.brand || "—"}
@@ -2153,141 +2168,6 @@ function IntakePageInner() {
   );
 }
 
-function buildCuratorNarrative({ aiResult, override }) {
-  if (!aiResult) return "";
-
-  const identity = aiResult.identity || {};
-  const dims = aiResult.dimensions || {};
-  const description = aiResult.description || {};
-  const availability = aiResult.availability || {};
-  const pricing = aiResult.pricing || {};
-
-  const featureBullets = description.feature_bullets || [];
-
-  const itemNumber = override.itemNumber || "";
-
-  const brand = override.brand || identity.brand || "";
-  const model = override.model || identity.model || "";
-  const category =
-    override.category || identity.category_primary || identity.category || "";
-  const color = override.color || identity.color || "";
-  const material = override.material || identity.material || "";
-  const condition = override.condition || "";
-
-  const gradingNotes = override.gradingNotes || "";
-
-  const measurementsParts = [];
-  if (dims.length) measurementsParts.push(`L: ${dims.length}`);
-  if (dims.height) measurementsParts.push(`H: ${dims.height}`);
-  if (dims.depth) measurementsParts.push(`D: ${dims.depth}`);
-  const measurementsLine =
-    measurementsParts.length > 0 ? measurementsParts.join(" · ") : "";
-
-  const lines = [];
-
-  if (itemNumber) {
-    lines.push(`Item #: ${itemNumber}`);
-  }
-
-  if (brand || model) {
-    lines.push(`Brand / Model: ${[brand, model].filter(Boolean).join(" · ")}`);
-  }
-  if (category) {
-    lines.push(`Category: ${category}`);
-  }
-  if (color) {
-    lines.push(`Color: ${color}`);
-  }
-  if (material) {
-    lines.push(`Material: ${material}`);
-  }
-  if (identity.year_range) {
-    lines.push(`Production Range: ${identity.year_range}`);
-  }
-  if (condition) {
-    lines.push(`Condition Grade: ${condition}`);
-  }
-  if (gradingNotes) {
-    lines.push(`Condition Notes: ${gradingNotes}`);
-  }
-
-  if (measurementsLine) {
-    lines.push("");
-    lines.push("Typical Measurements:");
-    lines.push(measurementsLine);
-  }
-
-  if (featureBullets.length > 0) {
-    lines.push("");
-    lines.push("Key Features:");
-    featureBullets.forEach((feat) => {
-      lines.push(`• ${feat}`);
-    });
-  }
-
-  const rarityLine =
-    availability.market_rarity || aiResult.included_items_notes || "";
-  if (rarityLine) {
-    lines.push("");
-    lines.push("Market Note:");
-    lines.push(rarityLine);
-  }
-
-  if (pricing.comp_low || pricing.comp_high) {
-    const low = pricing.comp_low ?? "";
-    const high = pricing.comp_high ?? "";
-    lines.push("");
-    lines.push("Pricing Insight:");
-    lines.push(`Observed resale range: ${low} – ${high} (approx.)`);
-  }
-
-  if (pricing.retail_price) {
-    lines.push(`Original retail (approx.): ${pricing.retail_price}`);
-  }
-
-  if (description.sales_forward) {
-    lines.push("");
-    lines.push("—");
-    lines.push("Sales-Forward Description:");
-    lines.push(description.sales_forward);
-  }
-
-  if (description.model_notes || description.history || description.styling) {
-    lines.push("");
-    lines.push("—");
-    lines.push("Model Notes & Analysis:");
-    if (description.model_notes) lines.push(description.model_notes);
-    if (description.history) lines.push(description.history);
-    if (description.styling) lines.push(description.styling);
-  }
-
-  return lines.join("\n");
-}
-
-function buildSearchKeywords({ identity, narrative, includedItems }) {
-  const keywords = new Set();
-
-  if (identity.brand) keywords.add(identity.brand);
-  if (identity.model) keywords.add(identity.model);
-  if (identity.category_primary) keywords.add(identity.category_primary);
-  if (identity.color) keywords.add(identity.color);
-  if (identity.material) keywords.add(identity.material);
-
-  (includedItems || []).forEach((itm) => {
-    if (itm) keywords.add(itm);
-  });
-
-  if (narrative) {
-    narrative
-      .split(/[\s,./]+/)
-      .map((w) => w.trim())
-      .filter((w) => w.length > 2)
-      .forEach((w) => keywords.add(w.toLowerCase()));
-  }
-
-  return Array.from(keywords);
-}
-
 const inputStyle = {
   width: "100%",
   padding: "6px 8px",
@@ -2311,6 +2191,14 @@ const previewStyle = {
   fontSize: "11px",
   margin: "2px 0",
   color: "#9ca3af",
+};
+
+const checkLabelStyle = {
+  fontSize: "11px",
+  display: "flex",
+  alignItems: "center",
+  gap: "4px",
+  color: "#e5e7eb",
 };
 
 const modalBackdropStyle = {
