@@ -73,8 +73,7 @@ function brandCode(brand) {
   if (name.includes("burberry")) return "BB";
   if (name.includes("coach")) return "CHC";
   if (name.includes("ferragamo")) return "FG";
-  if (name.includes("ysl") || name.includes("saint laurent"))
-    return "YSL";
+  if (name.includes("ysl") || name.includes("saint laurent")) return "YSL";
   if (name.includes("celine")) return "CL";
 
   return "BR-GEN";
@@ -645,15 +644,11 @@ function IntakePageInner() {
           const normalized = inc.toLowerCase();
           if (normalized.includes("dust")) updated.dust_bag = true;
           else if (normalized.includes("box")) updated.box = true;
-          else if (normalized.includes("strap"))
-            updated.strap = true;
+          else if (normalized.includes("strap")) updated.strap = true;
           else if (normalized.includes("auth") || normalized.includes("card"))
             updated.auth_card = true;
           else if (normalized.includes("tag")) updated.tags = true;
-          else if (
-            normalized.includes("lock") ||
-            normalized.includes("key")
-          )
+          else if (normalized.includes("lock") || normalized.includes("key"))
             updated.lock_and_key = true;
           else freeformExtras.push(inc);
         });
@@ -848,23 +843,158 @@ function IntakePageInner() {
     }
   }
 
+  // 🟡 Phase 1: simple Print Card handler (no QR/barcode art yet)
+  function handlePrintCard() {
+    const titleLine = itemNumber
+      ? `Item #: ${itemNumber}`
+      : "Item # (not assigned yet)";
+
+    const lines = [];
+
+    // Basic identity
+    lines.push(titleLine);
+    if (brand || model) {
+      lines.push(`Brand / Model: ${[brand, model].filter(Boolean).join(" · ")}`);
+    }
+    if (category) lines.push(`Category: ${category}`);
+    if (color) lines.push(`Color: ${color}`);
+    if (material) lines.push(`Material: ${material}`);
+    if (condition) lines.push(`Condition Grade: ${condition}`);
+    if (gradingNotes) lines.push(`Condition Notes: ${gradingNotes}`);
+
+    // Measurements
+    const dimsParts = [];
+    if (dimensions.length) dimsParts.push(`L: ${dimensions.length}`);
+    if (dimensions.height) dimsParts.push(`H: ${dimensions.height}`);
+    if (dimensions.depth) dimsParts.push(`D: ${dimensions.depth}`);
+    if (dimensions.strap_drop)
+      dimsParts.push(`Strap Drop: ${dimensions.strap_drop}`);
+
+    if (dimsParts.length > 0) {
+      lines.push("");
+      lines.push("Typical Measurements:");
+      lines.push(dimsParts.join(" · "));
+    }
+
+    // EMZCurator Description
+    lines.push("");
+    lines.push("EMZCurator Description:");
+    lines.push(curatorNarrative || "");
+
+    // Comparable sales & pricing
+    lines.push("");
+    lines.push("Comparable Sales & Price Insight:");
+    if (pricingPreview.retail_price) {
+      lines.push(
+        `Retail (approx., often USD): ${pricingPreview.retail_price}`
+      );
+    }
+    if (pricingPreview.comp_low) {
+      lines.push(`Comp Low: ${pricingPreview.comp_low}`);
+    }
+    if (pricingPreview.comp_high) {
+      lines.push(`Comp High: ${pricingPreview.comp_high}`);
+    }
+    if (pricingPreview.recommended_listing) {
+      lines.push(
+        `Recommended Listing: ${pricingPreview.recommended_listing}`
+      );
+    }
+    if (pricingPreview.whatnot_start) {
+      lines.push(
+        `Suggested Whatnot Start: ${pricingPreview.whatnot_start}`
+      );
+    }
+
+    if (
+      !pricingPreview.retail_price &&
+      !pricingPreview.comp_low &&
+      !pricingPreview.comp_high &&
+      !pricingPreview.recommended_listing &&
+      !pricingPreview.whatnot_start
+    ) {
+      lines.push(
+        "Run EMZCurator AI and reprint this card to include comparable sales."
+      );
+    }
+
+    // Inclusions
+    lines.push("");
+    lines.push("Inclusions:");
+    const incBoxes = [];
+    if (includedItems.dust_bag) incBoxes.push("☑ Dust bag");
+    if (includedItems.box) incBoxes.push("☑ Box");
+    if (includedItems.strap) incBoxes.push("☑ Strap");
+    if (includedItems.auth_card) incBoxes.push("☑ Auth card");
+    if (includedItems.tags) incBoxes.push("☑ Tags");
+    if (includedItems.lock_and_key) incBoxes.push("☑ Lock & key set");
+
+    const freeformLines = (includedFreeform || "")
+      .split("\n")
+      .map((x) => x.trim())
+      .filter((x) => x.length > 0);
+
+    incBoxes.push(...freeformLines.map((x) => `• ${x}`));
+
+    if (incBoxes.length === 0) {
+      lines.push("No inclusions recorded.");
+    } else {
+      lines.push(...incBoxes);
+    }
+
+    // Simple print window for Phase 1
+    const html = `
+      <html>
+        <head>
+          <title>EMZCurator Print Card</title>
+          <style>
+            body {
+              font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+              margin: 24px;
+              color: #111827;
+            }
+            pre {
+              white-space: pre-wrap;
+              word-wrap: break-word;
+              font-size: 12px;
+              line-height: 1.5;
+            }
+            h1 {
+              font-size: 18px;
+              margin-bottom: 12px;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>EMZCurator Intake Card</h1>
+          <pre>${escapeHtml(lines.join("\n"))}</pre>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    } else {
+      alert("Popup blocked. Please allow popups for this site to print.");
+    }
+  }
+
   const latestFive = userInventory.slice(0, 5);
 
   const filteredInventory = userInventory.filter((item) => {
     const term = inventorySearch.trim().toLowerCase();
     if (inventoryStatusFilter !== "all") {
-      if ((item.status || "intake") !== inventoryStatusFilter)
-        return false;
+      if ((item.status || "intake") !== inventoryStatusFilter) return false;
     }
     if (!term) return true;
     const sku = (item.item_number || "").toLowerCase();
     const b = (item.brand || "").toLowerCase();
     const m = (item.model || "").toLowerCase();
-    return (
-      sku.includes(term) ||
-      b.includes(term) ||
-      m.includes(term)
-    );
+    return sku.includes(term) || b.includes(term) || m.includes(term);
   });
 
   return (
@@ -879,6 +1009,7 @@ function IntakePageInner() {
           "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
+      {/* HEADER CARD */}
       <div
         style={{
           maxWidth: "1180px",
@@ -1034,6 +1165,7 @@ function IntakePageInner() {
         />
       </div>
 
+      {/* ITEM ID + SAVE STRIP */}
       <div
         style={{
           maxWidth: "1180px",
@@ -1112,6 +1244,7 @@ function IntakePageInner() {
         </div>
       </div>
 
+      {/* MAIN LAYOUT: LEFT (PHOTOS), RIGHT (CURATOR + PRICING + INCLUSIONS) */}
       <div
         style={{
           maxWidth: "1180px",
@@ -1122,6 +1255,7 @@ function IntakePageInner() {
           alignItems: "flex-start",
         }}
       >
+        {/* LEFT: PHOTOS + CONDITION + COST */}
         <section
           style={{
             background: "rgba(15,23,42,0.96)",
@@ -1337,8 +1471,7 @@ function IntakePageInner() {
                           overflow: "hidden",
                           background: "#020617",
                           cursor: "pointer",
-                          boxShadow:
-                            "0 8px 24px rgba(15,23,42,0.85)",
+                          boxShadow: "0 8px 24px rgba(15,23,42,0.85)",
                         }}
                       >
                         <img
@@ -1371,6 +1504,7 @@ function IntakePageInner() {
             )}
           </div>
 
+          {/* Currency & basic intake fields */}
           <label style={labelStyle}>Currency</label>
           <select
             value={currency}
@@ -1474,6 +1608,7 @@ function IntakePageInner() {
           </p>
         </section>
 
+        {/* RIGHT COLUMN */}
         <section
           style={{
             display: "flex",
@@ -1481,6 +1616,7 @@ function IntakePageInner() {
             gap: "12px",
           }}
         >
+          {/* EMZCurator Description + Print Card */}
           <div
             style={{
               background:
@@ -1569,11 +1705,13 @@ function IntakePageInner() {
             >
               When you click <strong>Print Card and Tags</strong>, the
               system will generate the full 8.5×11 card with EMZCurator
-              Description, Comparable Sales, Inclusions, and a detachable
-              foldable tag with logo ×2, QR code, barcode, and the item ID.
+              Description, Comparable Sales, Inclusions, and (in a later
+              phase) a detachable foldable tag with logo ×2, QR code,
+              barcode, and the item ID.
             </p>
           </div>
 
+          {/* Pricing & Status */}
           <div
             style={{
               background: "rgba(15,23,42,0.96)",
@@ -1682,6 +1820,7 @@ function IntakePageInner() {
             </div>
           </div>
 
+          {/* Inclusions */}
           <div
             style={{
               background: "rgba(15,23,42,0.96)",
@@ -1794,6 +1933,7 @@ function IntakePageInner() {
         </section>
       </div>
 
+      {/* INVENTORY BLOCK */}
       <div
         style={{
           maxWidth: "1180px",
@@ -1840,6 +1980,7 @@ function IntakePageInner() {
                   (item.images[0].url ||
                     item.images[0].image_url ||
                     item.images[0].src);
+
                 return (
                   <div
                     key={item.id}
@@ -2071,6 +2212,7 @@ function IntakePageInner() {
         </p>
       </div>
 
+      {/* COMPS MODAL */}
       {showCompsModal && (
         <div style={modalBackdropStyle}>
           <div style={modalWindowStyle}>
@@ -2244,4 +2386,3 @@ export default function IntakePage() {
     </Suspense>
   );
 }
-
