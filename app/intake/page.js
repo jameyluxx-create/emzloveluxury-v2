@@ -826,313 +826,329 @@ function IntakePageInner() {
       setIsSaving(false);
     }
   }
+function handlePrintCard() {
+  const safeItemNumber = itemNumber || "(not assigned yet)";
 
-  // New full print card: left = item info / features / market / pricing / inclusions,
-  // right = EMZCurator narrative, bottom = duplicate tags (QR left, barcode right).
-  function handlePrintCard() {
-    const safeItemNumber = itemNumber || "(not assigned yet)";
+  const origin =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : "https://emzloveluxury.com";
 
-    const origin =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : "https://emzloveluxury.com";
+  const itemPathId =
+    itemNumber && itemNumber !== "(not assigned yet)" ? itemNumber : "pending";
 
-    const itemPathId =
-      itemNumber && itemNumber !== "(not assigned yet)" ? itemNumber : "pending";
+  // Future: this should match the public item detail route
+  const itemUrl = `${origin}/item/${encodeURIComponent(itemPathId)}`;
 
-    const itemUrl = `${origin}/item/${encodeURIComponent(itemPathId)}`;
+  const logoUrl = `${origin}/emz-loveluxury-logo-horizontal.png`;
 
-    const logoUrl = `${origin}/emz-loveluxury-logo-horizontal.png`;
+  // QR + barcode values
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
+    itemUrl
+  )}&size=200x200&margin=0`;
 
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
-      itemUrl
-    )}&size=200x200&margin=0`;
+  const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(
+    itemPathId
+  )}&scale=2&includetext&background=ffffff`;
 
-    const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(
-      itemPathId
-    )}&scale=2&includetext&background=ffffff`;
+  // Measurements line
+  const dimsParts = [];
+  if (dimensions.length) dimsParts.push(`L: ${dimensions.length}`);
+  if (dimensions.height) dimsParts.push(`H: ${dimensions.height}`);
+  if (dimensions.depth) dimsParts.push(`D: ${dimensions.depth}`);
+  if (dimensions.strap_drop)
+    dimsParts.push(`Strap Drop: ${dimensions.strap_drop}`);
 
-    const dimsParts = [];
-    if (dimensions.length) dimsParts.push(`L: ${dimensions.length}`);
-    if (dimensions.height) dimsParts.push(`H: ${dimensions.height}`);
-    if (dimensions.depth) dimsParts.push(`D: ${dimensions.depth}`);
-    if (dimensions.strap_drop)
-      dimsParts.push(`Strap Drop: ${dimensions.strap_drop}`);
+  // Feature bullets, Market Note, Pricing Insight from AI data
+  const featureBullets =
+    aiData?.description?.feature_bullets &&
+    Array.isArray(aiData.description.feature_bullets)
+      ? aiData.description.feature_bullets
+      : [];
 
-    const featureBullets =
-      aiData?.description?.feature_bullets &&
-      Array.isArray(aiData.description.feature_bullets)
-        ? aiData.description.feature_bullets
-        : [];
+  const marketNote =
+    (aiData?.availability && aiData.availability.market_rarity) ||
+    aiData?.included_items_notes ||
+    "";
 
-    const marketNote =
-      (aiData?.availability && aiData.availability.market_rarity) ||
-      aiData?.included_items_notes ||
-      "";
-
-    const pricingLines = [];
-    if (pricingPreview.retail_price) {
-      pricingLines.push(
-        `Retail (approx., often USD): ${pricingPreview.retail_price}`
-      );
+  const pricingLines = [];
+  if (pricingPreview.retail_price) {
+    pricingLines.push(
+      `Retail (approx., often USD): ${pricingPreview.retail_price}`
+    );
+  }
+  if (pricingPreview.comp_low || pricingPreview.comp_high) {
+    const low = pricingPreview.comp_low || "";
+    const high = pricingPreview.comp_high || "";
+    if (low && high) {
+      pricingLines.push(`Observed resale range (approx.): ${low} – ${high}`);
+    } else if (low) {
+      pricingLines.push(`Observed resale range (approx.): from ${low}`);
+    } else if (high) {
+      pricingLines.push(`Observed resale range (approx.): up to ${high}`);
     }
-    if (pricingPreview.comp_low || pricingPreview.comp_high) {
-      const low = pricingPreview.comp_low || "";
-      const high = pricingPreview.comp_high || "";
-      if (low && high) {
-        pricingLines.push(`Observed resale range (approx.): ${low} – ${high}`);
-      } else if (low) {
-        pricingLines.push(`Observed resale range (approx.): from ${low}`);
-      } else if (high) {
-        pricingLines.push(`Observed resale range (approx.): up to ${high}`);
-      }
-    }
-    if (pricingPreview.recommended_listing) {
-      pricingLines.push(
-        `Internal anchor listing estimate: ${pricingPreview.recommended_listing}`
-      );
-    }
-    // whatnot_start intentionally NOT shown on card
+  }
+  if (pricingPreview.recommended_listing) {
+    pricingLines.push(
+      `Internal anchor listing estimate: ${pricingPreview.recommended_listing}`
+    );
+  }
+  // NOTE: We intentionally do NOT include pricingPreview.whatnot_start
+  //       per your request to remove "Suggested Whatnot start" from the card.
 
-    const freeformLines = (includedFreeform || "")
-      .split("\n")
-      .map((x) => x.trim())
-      .filter((x) => x.length > 0);
+  // Inclusions (small section at the very bottom of left column, optional)
+  const freeformLines = (includedFreeform || "")
+    .split("\n")
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0);
 
-    const compiledInclusions = [
-      includedItems.dust_bag ? "Dust bag" : null,
-      includedItems.box ? "Box" : null,
-      includedItems.strap ? "Strap" : null,
-      includedItems.auth_card ? "Authenticity card" : null,
-      includedItems.tags ? "Tags" : null,
-      includedItems.lock_and_key ? "Lock and key set" : null,
-      ...(includedItems.extras || []),
-      ...freeformLines,
-    ].filter(Boolean);
+  const compiledInclusions = [
+    includedItems.dust_bag ? "Dust bag" : null,
+    includedItems.box ? "Box" : null,
+    includedItems.strap ? "Strap" : null,
+    includedItems.auth_card ? "Authenticity card" : null,
+    includedItems.tags ? "Tags" : null,
+    includedItems.lock_and_key ? "Lock and key set" : null,
+    ...(includedItems.extras || []),
+    ...freeformLines,
+  ].filter(Boolean);
 
-    const safeBrand = escapeHtml(brand || "");
-    const safeModel = escapeHtml(model || "");
-    const safeCategory = escapeHtml(category || "");
-    const safeColor = escapeHtml(color || "");
-    const safeMaterial = escapeHtml(material || "");
-    const safeCondition = escapeHtml(condition || "");
-    const safeNotes = escapeHtml(gradingNotes || "");
-    const safeItemUrl = escapeHtml(itemUrl);
-    const safeNarrative = escapeHtml(curatorNarrative || "").trim();
+  const safeBrand = escapeHtml(brand || "");
+  const safeModel = escapeHtml(model || "");
+  const safeCategory = escapeHtml(category || "");
+  const safeColor = escapeHtml(color || "");
+  const safeMaterial = escapeHtml(material || "");
+  const safeCondition = escapeHtml(condition || "");
+  const safeNotes = escapeHtml(gradingNotes || "");
+  const safeItemUrl = escapeHtml(itemUrl);
+  const safeNarrative = escapeHtml(curatorNarrative || "").trim();
 
-    const hasPricingInsight = pricingLines.length > 0;
-    const hasMarketNote = !!marketNote;
-    const hasFeatures = featureBullets.length > 0;
-    const hasInclusions = compiledInclusions.length > 0;
+  const hasPricingInsight = pricingLines.length > 0;
+  const hasMarketNote = !!marketNote;
+  const hasFeatures = featureBullets.length > 0;
+  const hasInclusions = compiledInclusions.length > 0;
 
-    const html = `
-      <html>
-        <head>
-          <title>EMZLoveLuxury Print Card — ${escapeHtml(
-            safeItemNumber
-          )}</title>
-          <style>
-            @page {
-              size: Letter;
-              margin: 0.5in;
-            }
-            * {
-              box-sizing: border-box;
-            }
-            body {
-              margin: 0;
-              font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-              background: #f3f4f6;
-              color: #111827;
-            }
-            .page {
-              width: 100%;
-              max-width: 8.5in;
-              margin: 0 auto;
-            }
-            .card {
-              border-radius: 16px;
-              border: 1px solid #d4af37;
-              background: #ffffff;
-              padding: 16px 18px;
-              box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-            }
-            .card-header {
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 16px;
-              margin-bottom: 8px;
-            }
-            .logo {
-              height: 40px;
-              width: auto;
-            }
-            .card-id {
-              text-align: right;
-              font-size: 11px;
-              color: #4b5563;
-              max-width: 260px;
-            }
-            .card-id-url {
-              font-size: 10px;
-              color: #6b7280;
-              margin-bottom: 3px;
-              word-break: break-all;
-            }
-            .card-id-label {
-              font-size: 10px;
-              text-transform: uppercase;
-              letter-spacing: 0.16em;
-              color: #6b7280;
-            }
-            .card-id-value {
-              font-size: 14px;
-              font-weight: 600;
-              color: #111827;
-            }
-            .card-id-brand {
-              font-size: 11px;
-              color: #4b5563;
-            }
+  const html = `
+    <html>
+      <head>
+        <title>EMZLoveLuxury Print Card — ${escapeHtml(safeItemNumber)}</title>
+        <style>
+          @page {
+            size: Letter;
+            margin: 0.5in;
+          }
+          html, body {
+            height: 100%;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            margin: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #f3f4f6;
+            color: #111827;
+          }
+          .page {
+            /* Approximate usable height of Letter page minus margins */
+            height: 10.5in;
+            max-width: 8.5in;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+          }
+          .top-content {
+            flex: 1 1 auto;
+          }
+          .tag-strip-container {
+            flex-shrink: 0;
+            margin-top: 12px;
+          }
+          .card {
+            border-radius: 16px;
+            border: 1px solid #d4af37;
+            background: #ffffff;
+            padding: 16px 18px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+          }
+          .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 8px;
+          }
+          .logo {
+            height: 40px;
+            width: auto;
+          }
+          .card-id {
+            text-align: right;
+            font-size: 11px;
+            color: #4b5563;
+            max-width: 260px;
+          }
+          .card-id-url {
+            font-size: 10px;
+            color: #6b7280;
+            margin-bottom: 3px;
+            word-break: break-all;
+          }
+          .card-id-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: #6b7280;
+          }
+          .card-id-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: #111827;
+          }
+          .card-id-brand {
+            font-size: 11px;
+            color: #4b5563;
+          }
 
-            .card-body {
-              display: grid;
-              grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.35fr);
-              gap: 18px;
-              margin-top: 8px;
-            }
+          .card-body {
+            display: grid;
+            grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.35fr);
+            gap: 18px;
+            margin-top: 8px;
+          }
 
-            .card-section-title {
-              font-size: 11px;
-              text-transform: uppercase;
-              letter-spacing: 0.14em;
-              color: #6b7280;
-              margin-bottom: 4px;
-            }
+          .card-section-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: #6b7280;
+            margin-bottom: 4px;
+          }
 
-            .meta-list {
-              font-size: 11px;
-              line-height: 1.45;
-            }
-            .meta-list div {
-              margin-bottom: 2px;
-            }
-            .meta-label {
-              font-weight: 600;
-            }
+          .meta-list {
+            font-size: 11px;
+            line-height: 1.45;
+          }
+          .meta-list div {
+            margin-bottom: 2px;
+          }
+          .meta-label {
+            font-weight: 600;
+          }
 
-            .subsection-title {
-              margin-top: 8px;
-              font-size: 11px;
-              font-weight: 600;
-              text-transform: uppercase;
-              letter-spacing: 0.12em;
-              color: #6b7280;
-            }
-            .subsection-body {
-              font-size: 11px;
-              line-height: 1.45;
-              margin-top: 2px;
-            }
-            .subsection-body ul {
-              margin: 2px 0 0 16px;
-              padding: 0;
-            }
-            .subsection-body li {
-              margin-bottom: 1px;
-            }
+          .subsection-title {
+            margin-top: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #6b7280;
+          }
+          .subsection-body {
+            font-size: 11px;
+            line-height: 1.45;
+            margin-top: 2px;
+          }
+          .subsection-body ul {
+            margin: 2px 0 0 16px;
+            padding: 0;
+          }
+          .subsection-body li {
+            margin-bottom: 1px;
+          }
 
-            .narrative-box {
-              border-radius: 10px;
-              border: 1px solid #e5e7eb;
-              background: #f9fafb;
-              padding: 8px;
-              font-size: 11px;
-              min-height: 120px;
-            }
-            .narrative-box pre {
-              margin: 0;
-              white-space: pre-wrap;
-              word-wrap: break-word;
-              font-family: inherit;
-              font-size: 11px;
-              line-height: 1.45;
-            }
+          .narrative-box {
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            padding: 8px;
+            font-size: 11px;
+            min-height: 120px;
+          }
+          .narrative-box pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: inherit;
+            font-size: 11px;
+            line-height: 1.45;
+          }
 
-            .cutline {
-              margin-top: 18px;
-              border-top: 1px dashed #9ca3af;
-              text-align: center;
-              font-size: 10px;
-              color: #6b7280;
-              padding-top: 4px;
-            }
-            .fold-note {
-              font-size: 9px;
-              color: #6b7280;
-              text-align: center;
-              margin-top: 2px;
-            }
+          .cutline {
+            margin-top: 18px;
+            border-top: 1px dashed #9ca3af;
+            text-align: center;
+            font-size: 10px;
+            color: #6b7280;
+            padding-top: 4px;
+          }
+          .fold-note {
+            font-size: 9px;
+            color: #6b7280;
+            text-align: center;
+            margin-top: 2px;
+          }
 
-            .tag-strip {
-              margin-top: 8px;
-              display: flex;
-              flex-direction: column;
-              gap: 6px;
-            }
-            .tag-row {
-              border-radius: 10px;
-              border: 1px solid #111827;
-              background: #ffffff;
-              padding: 6px 8px;
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-            }
-            .tag-left,
-            .tag-center,
-            .tag-right {
-              display: flex;
-              align-items: center;
-              justify-content: center;
-            }
-            .tag-left,
-            .tag-right {
-              width: 90px;
-            }
-            .tag-center {
-              flex: 1;
-              flex-direction: column;
-              text-align: center;
-            }
-            .tag-logo {
-              height: 20px;
-              width: auto;
-              margin-bottom: 2px;
-            }
-            .tag-middle-text {
-              font-size: 9px;
-              text-transform: uppercase;
-              letter-spacing: 0.12em;
-              color: #4b5563;
-            }
-            .tag-id {
-              font-size: 10px;
-              font-weight: 600;
-              color: #111827;
-              margin-top: 2px;
-            }
-            .qr-img,
-            .barcode-img {
-              max-height: 70px;
-              max-width: 100%;
-              display: block;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="page">
+          .tag-strip {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+          .tag-row {
+            border-radius: 10px;
+            border: 1px solid #111827;
+            background: #ffffff;
+            padding: 6px 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          }
+          .tag-left,
+          .tag-center,
+          .tag-right {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .tag-left,
+          .tag-right {
+            width: 90px;
+          }
+          .tag-center {
+            flex: 1;
+            flex-direction: column;
+            text-align: center;
+          }
+          .tag-logo {
+            height: 20px;
+            width: auto;
+            margin-bottom: 2px;
+          }
+          .tag-middle-text {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #4b5563;
+          }
+          .tag-id {
+            font-size: 10px;
+            font-weight: 600;
+            color: #111827;
+            margin-top: 2px;
+          }
+          .qr-img,
+          .barcode-img {
+            max-height: 70px;
+            max-width: 100%;
+            display: block;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+
+          <!-- Everything ABOVE the tags -->
+          <div class="top-content">
             <div class="card">
               <div class="card-header">
                 <img src="${logoUrl}" class="logo" alt="EMZLoveLuxury" />
@@ -1147,7 +1163,7 @@ function IntakePageInner() {
               </div>
 
               <div class="card-body">
-                <!-- LEFT COLUMN: item info + features + market + pricing + inclusions -->
+                <!-- LEFT COLUMN: item info + features + market + pricing -->
                 <div>
                   <div class="card-section-title">Item Information</div>
                   <div class="meta-list">
@@ -1212,7 +1228,7 @@ function IntakePageInner() {
                   <div class="subsection-title">Inclusions</div>
                   <div class="subsection-body">
                     ${compiledInclusions
-                      .map((inc) => "• " + escapeHtml(inc))
+                      .map((inc) => `• ${escapeHtml(inc)}`)
                       .join("<br />")}
                   </div>
                   `
@@ -1237,7 +1253,10 @@ function IntakePageInner() {
               CUT ALONG THIS LINE TO CREATE HANG TAGS
               <div class="fold-note">(Two identical tags below: QR on the left, barcode on the right.)</div>
             </div>
+          </div>
 
+          <!-- TAGS LOCKED TO BOTTOM OF PAGE -->
+          <div class="tag-strip-container">
             <div class="tag-strip">
               <div class="tag-row">
                 <div class="tag-left">
@@ -1268,19 +1287,22 @@ function IntakePageInner() {
               </div>
             </div>
           </div>
-        </body>
-      </html>
-    `;
 
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(html);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
-    } else {
-      alert("Popup blocked. Please allow popups for this site to print.");
-    }
+        </div>
+      </body>
+    </html>
+  `;
+
+  const printWindow = window.open("", "_blank");
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  } else {
+    alert("Popup blocked. Please allow popups for this site to print.");
+  }
+
   }
 
   const latestFive = userInventory.slice(0, 5);
