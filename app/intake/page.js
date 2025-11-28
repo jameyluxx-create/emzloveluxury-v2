@@ -51,11 +51,19 @@ async function resizeImage(file, maxSize = 1200, quality = 0.8) {
   });
 }
 
-// Escape HTML for print card
-function escapeHtml(str) {
-  if (!str) return "";
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// Escape HTML for print card (safe for non-string input)
+function escapeHtml(value) {
+  if (value === null || value === undefined) return "";
+
+  // Coerce everything to string first
+  const str = String(value);
+
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
+
 
 // Convert brand string → code
 function brandCode(brand) {
