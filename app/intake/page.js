@@ -909,12 +909,12 @@ function IntakePageInner() {
   const itemPathId =
     itemNumber && itemNumber !== "(not assigned yet)" ? itemNumber : "pending";
 
-  // Future: this should match the public item detail route
+  // This should eventually match your public item detail route
   const itemUrl = `${origin}/item/${encodeURIComponent(itemPathId)}`;
 
   const logoUrl = `${origin}/emz-loveluxury-logo-horizontal.png`;
 
-  // QR + barcode values
+  // QR + barcode image URLs
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
     itemUrl
   )}&size=200x200&margin=0`;
@@ -931,7 +931,7 @@ function IntakePageInner() {
   if (dimensions.strap_drop)
     dimsParts.push(`Strap Drop: ${dimensions.strap_drop}`);
 
-  // Feature bullets, Market Note, Pricing Insight from AI data
+  // Feature bullets & market note from AI data
   const featureBullets =
     aiData?.description?.feature_bullets &&
     Array.isArray(aiData.description.feature_bullets)
@@ -943,36 +943,36 @@ function IntakePageInner() {
     aiData?.included_items_notes ||
     "";
 
+  // Pricing insight lines
   const pricingLines = [];
-  if (pricingPreview.retail_price) {
+  if (pricingPreview.retail_price != null) {
     pricingLines.push(
       `Retail (approx., often USD): ${pricingPreview.retail_price}`
     );
   }
-  if (pricingPreview.comp_low || pricingPreview.comp_high) {
-    const low = pricingPreview.comp_low || "";
-    const high = pricingPreview.comp_high || "";
+  if (pricingPreview.comp_low != null || pricingPreview.comp_high != null) {
+    const low =
+      pricingPreview.comp_low != null ? String(pricingPreview.comp_low) : "";
+    const high =
+      pricingPreview.comp_high != null ? String(pricingPreview.comp_high) : "";
     if (low && high) {
-      pricingLines.push(`Observed resale range (approx.): ${low} – ${high}`);
+      pricingLines.push(
+        `Observed resale range (approx.): ${low} – ${high}`
+      );
     } else if (low) {
       pricingLines.push(`Observed resale range (approx.): from ${low}`);
     } else if (high) {
       pricingLines.push(`Observed resale range (approx.): up to ${high}`);
     }
   }
-  if (pricingPreview.recommended_listing) {
+  if (pricingPreview.recommended_listing != null) {
     pricingLines.push(
       `Internal anchor listing estimate: ${pricingPreview.recommended_listing}`
     );
   }
-  // NOTE: We intentionally do NOT include pricingPreview.whatnot_start
+  // Still intentionally NOT using whatnot_start on the card
 
-  // Tag price labels
-  const retailLabel =
-    pricingPreview.comp_high || pricingPreview.retail_price || "";
-  const saleLabel = pricingPreview.recommended_listing || "";
-
-  // Inclusions (small section at the very bottom of left column, optional)
+  // Inclusions (for left-column “Inclusions” block)
   const freeformLines = (includedFreeform || "")
     .split("\n")
     .map((x) => x.trim())
@@ -1004,11 +1004,25 @@ function IntakePageInner() {
   const hasFeatures = featureBullets.length > 0;
   const hasInclusions = compiledInclusions.length > 0;
 
+  // Values specifically for the tag text
+  const retailOrHighCompRaw =
+    pricingPreview.comp_high != null
+      ? pricingPreview.comp_high
+      : pricingPreview.retail_price != null
+      ? pricingPreview.retail_price
+      : null;
+  const retailOrHighComp = retailOrHighCompRaw != null
+    ? String(retailOrHighCompRaw)
+    : "";
+
+  const emzSaleRaw = listingPrice ? `${currency} ${listingPrice}` : "";
+  const emzSale = emzSaleRaw ? String(emzSaleRaw) : "";
+
   const html = `
     <html>
       <head>
         <title>EMZLoveLuxury Print Card — ${escapeHtml(
-          safeItemNumber
+          String(safeItemNumber)
         )}</title>
         <style>
           @page {
@@ -1044,7 +1058,7 @@ function IntakePageInner() {
             margin-bottom: 8px;
           }
           .logo {
-            height: 40px;
+            height: 80px; /* 2x previous 40px */
             width: auto;
           }
           .card-id {
@@ -1139,83 +1153,67 @@ function IntakePageInner() {
             line-height: 1.45;
           }
 
-          /* TAG STRIP – 4 columns with center fold line */
           .tag-strip {
-            margin-top: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
+            margin-top: 18px;
+            border-radius: 12px;
+            border: 1px dashed #9ca3af;
+            padding: 6px 8px;
           }
           .tag-row {
-            position: relative;
             border-radius: 10px;
             border: 1px solid #111827;
             background: #ffffff;
-            padding: 6px 10px;
+            padding: 6px 8px;
             display: grid;
-            grid-template-columns: 1.5fr 1fr 1fr 1.5fr;
+            grid-template-columns: 1.6fr 1fr 1fr 1.6fr; /* Far left, center-left logo, center-right logo, far right */
             align-items: center;
-            column-gap: 8px;
+            gap: 4px;
+            margin-bottom: 6px;
           }
-          .tag-row::before {
-            content: "";
-            position: absolute;
-            top: 6px;
-            bottom: 6px;
-            left: 50%;
-            transform: translateX(-0.5px);
-            border-left: 1px dashed #d1d5db;
+          .tag-row:last-child {
+            margin-bottom: 0;
           }
-          .tag-col {
+          .tag-info-left,
+          .tag-info-right {
+            font-size: 9px;
+            line-height: 1.4;
+          }
+          .tag-info-line-strong {
+            font-weight: 600;
+            font-size: 10px;
+          }
+          .tag-logo-col {
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            text-align: center;
-            font-size: 9px;
-            line-height: 1.3;
-          }
-          .tag-col-text {
-            align-items: flex-start;
-            text-align: left;
+            padding: 0 4px;
           }
           .tag-logo {
-            height: 20px;
+            height: 40px; /* 2x previous 20px */
             width: auto;
-            margin-bottom: 2px;
           }
-          .tag-item-id {
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-            margin-bottom: 1px;
+          .tag-fold-border-left {
+            border-left: 1px dashed #9ca3af;
           }
-          .tag-brand {
+
+          .tag-id-small {
             font-size: 9px;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            margin-bottom: 1px;
+            margin-top: 2px;
           }
+
+          .qr-img,
+          .barcode-img {
+            max-height: 50px;
+            max-width: 100%;
+            display: block;
+            margin-top: 4px;
+          }
+
           .tag-price-line {
             font-size: 9px;
           }
           .tag-price-label {
             font-weight: 600;
-          }
-          .tag-code-row {
-            margin-top: 4px;
-            align-self: stretch;
-            display: flex;
-            justify-content: flex-start;
-          }
-          .tag-col-right .tag-code-row {
-            justify-content: flex-end;
-          }
-          .qr-img,
-          .barcode-img {
-            max-height: 48px;
-            max-width: 100%;
-            display: block;
           }
         </style>
       </head>
@@ -1227,7 +1225,9 @@ function IntakePageInner() {
               <div class="card-id">
                 <div class="card-id-url">${safeItemUrl}</div>
                 <div class="card-id-label">Item ID / SKU</div>
-                <div class="card-id-value">${escapeHtml(safeItemNumber)}</div>
+                <div class="card-id-value">${escapeHtml(
+                  String(safeItemNumber)
+                )}</div>
                 <div class="card-id-brand">
                   ${safeBrand}${safeModel ? " · " + safeModel : ""}
                 </div>
@@ -1235,7 +1235,7 @@ function IntakePageInner() {
             </div>
 
             <div class="card-body">
-              <!-- LEFT COLUMN: item info + features + market + pricing -->
+              <!-- LEFT COLUMN: item info + features + market + pricing + inclusions -->
               <div>
                 <div class="card-section-title">Item Information</div>
                 <div class="meta-list">
@@ -1301,7 +1301,7 @@ function IntakePageInner() {
                 <div class="subsection-title">Pricing Insight</div>
                 <div class="subsection-body">
                   ${pricingLines
-                    .map((line) => escapeHtml(line))
+                    .map((line) => escapeHtml(String(line)))
                     .join("<br />")}
                 </div>
                 `
@@ -1314,7 +1314,7 @@ function IntakePageInner() {
                 <div class="subsection-title">Inclusions</div>
                 <div class="subsection-body">
                   ${compiledInclusions
-                    .map((inc) => "• " + escapeHtml(inc))
+                    .map((inc) => `• ${escapeHtml(String(inc))}`)
                     .join("<br />")}
                 </div>
                 `
@@ -1333,134 +1333,118 @@ function IntakePageInner() {
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- TAG STRIP (two identical tag rows) -->
-          <div class="tag-strip">
-            <div class="tag-row">
-              <!-- Far Left: text + barcode -->
-              <div class="tag-col tag-col-text">
-                <div class="tag-item-id">Item #: ${escapeHtml(
-                  safeItemNumber
-                )}</div>
-                ${
-                  safeBrand
-                    ? '<div class="tag-brand">' + safeBrand + "</div>"
-                    : ""
-                }
-                <div class="tag-price-line">
-                  <span class="tag-price-label">Retail / High:</span>${
-                    retailLabel
-                      ? " " + escapeHtml(retailLabel)
-                      : " —"
+            <!-- TAG STRIP (two identical tags, 4-column vertical fold layout) -->
+            <div class="tag-strip">
+              <div class="tag-row">
+                <!-- Far Left: Item info + BARCODE -->
+                <div class="tag-info-left">
+                  <div class="tag-info-line-strong">
+                    ${escapeHtml(String(safeItemNumber))}
+                  </div>
+                  <div>${safeBrand || "—"}</div>
+                  ${
+                    retailOrHighComp
+                      ? `<div class="tag-price-line"><span class="tag-price-label">Retail / High Comp:</span> ${escapeHtml(
+                          retailOrHighComp
+                        )}</div>`
+                      : ""
                   }
-                </div>
-                <div class="tag-price-line">
-                  <span class="tag-price-label">EMZSale:</span>${
-                    saleLabel ? " " + escapeHtml(saleLabel) : " —"
+                  ${
+                    emzSale
+                      ? `<div class="tag-price-line"><span class="tag-price-label">EMZ Sale:</span> ${escapeHtml(
+                          emzSale
+                        )}</div>`
+                      : ""
                   }
-                </div>
-                <div class="tag-code-row">
                   <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
                 </div>
-              </div>
 
-              <!-- Center Left: logo -->
-              <div class="tag-col">
-                <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-              </div>
-
-              <!-- Center Right: logo -->
-              <div class="tag-col">
-                <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-              </div>
-
-              <!-- Far Right: text + QR -->
-              <div class="tag-col tag-col-text tag-col-right">
-                <div class="tag-item-id">Item #: ${escapeHtml(
-                  safeItemNumber
-                )}</div>
-                ${
-                  safeBrand
-                    ? '<div class="tag-brand">' + safeBrand + "</div>"
-                    : ""
-                }
-                <div class="tag-price-line">
-                  <span class="tag-price-label">Retail / High:</span>${
-                    retailLabel
-                      ? " " + escapeHtml(retailLabel)
-                      : " —"
-                  }
+                <!-- Center Left: EMZ logo -->
+                <div class="tag-logo-col">
+                  <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
                 </div>
-                <div class="tag-price-line">
-                  <span class="tag-price-label">EMZSale:</span>${
-                    saleLabel ? " " + escapeHtml(saleLabel) : " —"
-                  }
+
+                <!-- Center Right: EMZ logo (with dashed border = fold line) -->
+                <div class="tag-logo-col tag-fold-border-left">
+                  <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
                 </div>
-                <div class="tag-code-row">
+
+                <!-- Far Right: Item info + QR -->
+                <div class="tag-info-right">
+                  <div class="tag-info-line-strong">
+                    ${escapeHtml(String(safeItemNumber))}
+                  </div>
+                  <div>${safeBrand || "—"}</div>
+                  ${
+                    retailOrHighComp
+                      ? `<div class="tag-price-line"><span class="tag-price-label">Retail / High Comp:</span> ${escapeHtml(
+                          retailOrHighComp
+                        )}</div>`
+                      : ""
+                  }
+                  ${
+                    emzSale
+                      ? `<div class="tag-price-line"><span class="tag-price-label">EMZ Sale:</span> ${escapeHtml(
+                          emzSale
+                        )}</div>`
+                      : ""
+                  }
                   <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
                 </div>
               </div>
-            </div>
 
-            <!-- Second identical tag row -->
-            <div class="tag-row">
-              <div class="tag-col tag-col-text">
-                <div class="tag-item-id">Item #: ${escapeHtml(
-                  safeItemNumber
-                )}</div>
-                ${
-                  safeBrand
-                    ? '<div class="tag-brand">' + safeBrand + "</div>"
-                    : ""
-                }
-                <div class="tag-price-line">
-                  <span class="tag-price-label">Retail / High:</span>${
-                    retailLabel
-                      ? " " + escapeHtml(retailLabel)
-                      : " —"
+              <!-- Second identical tag row for a second physical tag -->
+              <div class="tag-row">
+                <div class="tag-info-left">
+                  <div class="tag-info-line-strong">
+                    ${escapeHtml(String(safeItemNumber))}
+                  </div>
+                  <div>${safeBrand || "—"}</div>
+                  ${
+                    retailOrHighComp
+                      ? `<div class="tag-price-line"><span class="tag-price-label">Retail / High Comp:</span> ${escapeHtml(
+                          retailOrHighComp
+                        )}</div>`
+                      : ""
                   }
-                </div>
-                <div class="tag-price-line">
-                  <span class="tag-price-label">EMZSale:</span>${
-                    saleLabel ? " " + escapeHtml(saleLabel) : " —"
+                  ${
+                    emzSale
+                      ? `<div class="tag-price-line"><span class="tag-price-label">EMZ Sale:</span> ${escapeHtml(
+                          emzSale
+                        )}</div>`
+                      : ""
                   }
-                </div>
-                <div class="tag-code-row">
                   <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
                 </div>
-              </div>
 
-              <div class="tag-col">
-                <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-              </div>
-
-              <div class="tag-col">
-                <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-              </div>
-
-              <div class="tag-col tag-col-text tag-col-right">
-                <div class="tag-item-id">Item #: ${escapeHtml(
-                  safeItemNumber
-                )}</div>
-                ${
-                  safeBrand
-                    ? '<div class="tag-brand">' + safeBrand + "</div>"
-                    : ""
-                }
-                <div class="tag-price-line">
-                  <span class="tag-price-label">Retail / High:</span>${
-                    retailLabel
-                      ? " " + escapeHtml(retailLabel)
-                      : " —"
-                  }
+                <div class="tag-logo-col">
+                  <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
                 </div>
-                <div class="tag-price-line">
-                  <span class="tag-price-label">EMZSale:</span>${
-                    saleLabel ? " " + escapeHtml(saleLabel) : " —"
-                  }
+
+                <div class="tag-logo-col tag-fold-border-left">
+                  <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
                 </div>
-                <div class="tag-code-row">
+
+                <div class="tag-info-right">
+                  <div class="tag-info-line-strong">
+                    ${escapeHtml(String(safeItemNumber))}
+                  </div>
+                  <div>${safeBrand || "—"}</div>
+                  ${
+                    retailOrHighComp
+                      ? `<div class="tag-price-line"><span class="tag-price-label">Retail / High Comp:</span> ${escapeHtml(
+                          retailOrHighComp
+                        )}</div>`
+                      : ""
+                  }
+                  ${
+                    emzSale
+                      ? `<div class="tag-price-line"><span class="tag-price-label">EMZ Sale:</span> ${escapeHtml(
+                          emzSale
+                        )}</div>`
+                      : ""
+                  }
                   <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
                 </div>
               </div>
