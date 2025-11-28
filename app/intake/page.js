@@ -397,8 +397,10 @@ function buildInventorySlug(itemNumber, brand, model) {
 // -------------------------- main component -------------------------
 
 function IntakePageInner() {
-  // User — we will later wire this to real auth
-  const currentUserId = "demo-user-123";
+
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [listingId, setListingId] = useState(null); // existing if you already added it
+  const [skuLocked, setSkuLocked] = useState(false); // existing if you already added it
 
   // NEW — for database tracking + locking the SKU
   const [listingId, setListingId] = useState(null);
@@ -484,9 +486,32 @@ function IntakePageInner() {
   const narrativeRef = useRef(null);
   const includedRef = useRef(null);
 
-  useEffect(() => {
-    loadInventory();
-  }, []);
+useEffect(() => {
+  async function fetchUser() {
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) {
+        console.error("Error fetching Supabase user", error);
+        return;
+      }
+      if (data?.user?.id) {
+        setCurrentUserId(data.user.id);
+      }
+    } catch (err) {
+      console.error("Unexpected error getting user", err);
+    }
+  }
+
+  fetchUser();
+}, []);
+
+// REMOVE the old: useEffect(() => { loadInventory(); }, []);
+
+useEffect(() => {
+  if (!currentUserId) return;
+  loadInventory(currentUserId);
+}, [currentUserId]);
+
 
   useEffect(() => {
     if (narrativeRef.current) {
@@ -546,25 +571,28 @@ function IntakePageInner() {
     updateItemNumber(brandCodeState, modelCodeState, sequenceNum);
   }, [sequenceNum]);
 
-  async function loadInventory() {
-    try {
-      const { data: allListings } = await supabase
-        .from("listings")
-        .select("*")
-        .order("created_at", { ascending: false });
+async function loadInventory(userIdOverride) {
+  const userId = userIdOverride || currentUserId;
+  if (!userId) return; // nothing to load until we know who you are
 
-      const { data: myListings } = await supabase
-        .from("listings")
-        .select("*")
-        .eq("user_id", currentUserId)
-        .order("created_at", { ascending: false });
+  try {
+    const { data: allListings } = await supabase
+      .from("inventory_items")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-      if (allListings) setGlobalInventory(allListings);
-      if (myListings) setUserInventory(myListings);
-    } catch (err) {
-      console.error("Error loading inventory", err);
-    }
+    const { data: myListings } = await supabase
+      .from("inventory_items")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (allListings) setGlobalInventory(allListings);
+    if (myListings) setUserInventory(myListings);
+  } catch (err) {
+    console.error("Error loading inventory", err);
   }
+}
 
     function updateItemNumber(brandC, modelC, seq) {
     // Once a real SKU has been created, never auto-change it again
@@ -999,27 +1027,167 @@ function IntakePageInner() {
   }
 }
 
-   async function handleSave() {
-    setIsSaving(true);
-    setErrorMsg("");
-    setSuccessMsg("");
+  async function handleSave() {
+  setIsSaving(true);
+  setErrorMsg("");
+  setSuccessMsg("");
 
-    if (!condition) {
-      setErrorMsg("Please grade the condition of the item.");
+  if (!currentUserId) {
+    setErrorMsg("You must be logged in to save items.");
+    setIsSaving(false);
+    return;
+  }
+
+  if (!condition) {
+    setErrorMsg("Please grade the condition of the item.");
+    setIsSaving(false);
+    return;
+  }
+
+  if (listForSale) {
+    const priceNum = Number(listingPrice || 0);
+    if (!listingPrice || isNaN(priceNum) || priceNum <= 0) {
+      setErrorMsg(
+        "Please Set Listing Price greater than zero before saving as Ready to Sell."
+      );
+      setIsSaving(false);
+      return;
+    }
+  }
+
+  try {
+    // ---------- 1) Ensure we have a FINAL SKU ----------
+    let finalItemNumber = itemNumber;
+    let nextSeq = sequenceNum;
+
+    // If SKU is not locked yet, or is still a temp SKU, generate a real one now
+    if (
+      !skuLocked ||
+      !finalItemNumber ||
+      finalItemNumber.startsWith("EMZ-TEMP")
+    ) {
+      const brandC = brandCode(brand);
+      const modelC = modelCode(model);
+      nextSeq = await fetchNextSequence(supabase, brandC, modelC);
+
+      finalItemNumber = `${brandC}-${modelC}-EMZ-${nextSeq}`;
+
+      setBrandCodeState(brandC);
+      setModelCodeState(modelC);
+      setSequenceNum(nextSeq);
+      setItemNumber(finalItemNumber);
+      setSkuLocked(true);
+    }
+
+    // ---------- 2) Build payload ----------
+    const imagesPayload = images.filter((img) => img !== null);
+
+    const aiIdentity = aiData?.identity || {};
+    const identity = {
+      ...aiIdentity,
+      brand: brand || aiIdentity.brand || null,
+      model: model || aiIdentity.model || null,
+      category_primary: category || aiIdentity.category_primary || null,
+      color: color || aiIdentity.color || null,
+      material: material || aiIdentity.material || null,
+    };
+
+    const pricing = aiData?.pricing || null;
+    const seo = aiData?.seo ? { ...aiData.seo, user_override: false } : null;
+
+    const freeformLines = (includedFreeform || "")
+      .split("\n")
+      .map((x) => x.trim())
+      .filter((x) => x.length > 0);
+
+    const compiledIncluded = [
+      includedItems.dust_bag ? "Dust bag" : null,
+      includedItems.box ? "Box" : null,
+      includedItems.strap ? "Strap" : null,
+      includedItems.auth_card ? "Authenticity card" : null,
+      includedItems.tags ? "Tags" : null,
+      includedItems.lock_and_key ? "Lock and key set" : null,
+      ...(includedItems.extras || []),
+      ...freeformLines,
+    ].filter(Boolean);
+
+    const search_keywords = buildSearchKeywords({
+      identity,
+      narrative: curatorNarrative,
+      includedItems: compiledIncluded,
+    });
+
+    const payload = {
+      user_id: currentUserId,
+      item_number: finalItemNumber,
+      brand: identity.brand,
+      model: identity.model,
+      category: identity.category_primary,
+      color: identity.color,
+      material: identity.material,
+      description: curatorNarrative || null,
+      condition,
+      condition_notes: gradingNotes || null,
+      currency,
+      cost: cost ? Number(cost) : null,
+      listing_price: listingPrice ? Number(listingPrice) : null,
+      images: imagesPayload,
+      identity,
+      dimensions,
+      included_items: compiledIncluded,
+      pricing,
+      seo,
+      search_keywords,
+      status: listForSale ? "ready_to_sell" : "intake",
+      is_public: listForSale,
+    };
+
+    // ---------- 3) UPDATE vs INSERT ----------
+    let data;
+    let error;
+
+    if (listingId) {
+      // Existing row (e.g. temp row from first photo) → UPDATE it
+      ({ data, error } = await supabase
+        .from("inventory_items")
+        .update(payload)
+        .eq("id", listingId)
+        .select()
+        .single());
+    } else {
+      // No row yet → INSERT new one
+      ({ data, error } = await supabase
+        .from("inventory_items")
+        .insert(payload)
+        .select()
+        .single());
+
+      if (data?.id) {
+        setListingId(data.id); // remember it for future updates
+      }
+    }
+
+    if (error) {
+      console.error(error);
+      setErrorMsg("Could not save item.");
       setIsSaving(false);
       return;
     }
 
-    if (listForSale) {
-      const priceNum = Number(listingPrice || 0);
-      if (!listingPrice || isNaN(priceNum) || priceNum <= 0) {
-        setErrorMsg(
-          "Please Set Listing Price greater than zero before saving as Ready to Sell."
-        );
-        setIsSaving(false);
-        return;
-      }
-    }
+    setSuccessMsg(
+      listForSale
+        ? "Item added and marked ready to sell."
+        : "Item saved to inventory."
+    );
+
+    await loadInventory(currentUserId);
+  } catch (err) {
+    console.error(err);
+    setErrorMsg("Could not save item.");
+  } finally {
+    setIsSaving(false);
+  }
+}
 
     // HARD RULE: new items must have a main photo
     const hero = images[0];
@@ -1662,6 +1830,27 @@ function IntakePageInner() {
             }}
           />
         </div>
+        
+        {itemNumber && (
+  <div
+    style={{
+      fontSize: "11px",
+      color: "#9ca3af",
+      marginTop: "4px",
+    }}
+  >
+    Public URL:&nbsp;
+    <a
+      href={`/item/${encodeURIComponent(itemNumber)}`}
+      target="_blank"
+      rel="noreferrer"
+      style={{ color: "#bfdbfe", textDecoration: "underline" }}
+    >
+      {`/item/${itemNumber}`}
+    </a>
+  </div>
+)}
+
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <button
             type="button"
