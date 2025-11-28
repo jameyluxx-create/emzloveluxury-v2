@@ -368,6 +368,31 @@ function buildSearchKeywords({ identity, narrative, includedItems }) {
   return Array.from(keywords);
 }
 
+// ----------------- slug helper (Option C: ITEMNUMBER-brand-model) -----------------
+function buildInventorySlug(itemNumber, brand, model) {
+  const parts = [];
+
+  if (brand) parts.push(String(brand));
+  if (model) parts.push(String(model));
+
+  const base = parts.join(" ").toLowerCase();
+
+  const simpleSlug = base
+    .normalize("NFKD") // strip accents
+    .replace(/[^\w\s-]/g, "") // remove non-word chars
+    .trim()
+    .replace(/\s+/g, "-"); // spaces → dashes
+
+  if (!itemNumber && !simpleSlug) return "";
+
+  if (!simpleSlug) return String(itemNumber).toLowerCase();
+
+  if (!itemNumber) return simpleSlug;
+
+  // Option C: ITEMNUMBER-brand-model
+  return `${String(itemNumber).toLowerCase()}-${simpleSlug}`;
+}
+
 
 // -------------------------- main component -------------------------
 
@@ -774,6 +799,104 @@ function IntakePageInner() {
     }
   }
 
+  async function saveInventoryItem({
+  itemNumber,
+  brand,
+  model,
+  category,
+  color,
+  material,
+  conditionGrade,
+  gradingNotes,
+  dimensions,
+  aiData,
+  images,
+  pricingPreview,
+  listingPrice,
+  currency,
+}) {
+  try {
+    if (!itemNumber) return;
+
+    const fullSlug = buildInventorySlug(itemNumber, brand, model);
+
+    const aiIdentity = aiData?.identity || {};
+    const mergedIdentity = {
+      ...aiIdentity,
+      brand: brand || aiIdentity.brand || null,
+      model: model || aiIdentity.model || null,
+      category_primary: category || aiIdentity.category_primary || null,
+      color: color || aiIdentity.color || null,
+      material: material || aiIdentity.material || null,
+    };
+
+    const retail_price =
+      pricingPreview?.comp_high ??
+      pricingPreview?.retail_price ??
+      null;
+
+    const emzSaleNumber =
+      listingPrice && String(listingPrice).trim().length > 0
+        ? Number(listingPrice)
+        : pricingPreview?.recommended_listing ?? null;
+
+    const { error } = await supabase
+      .from("inventory_items")
+      .upsert(
+        [
+          {
+            item_number: itemNumber,
+            slug: fullSlug.replace(/^[^-]+-/, ""), // brand-model part
+            full_slug: fullSlug,
+
+            brand: mergedIdentity.brand,
+            model: mergedIdentity.model,
+            style: mergedIdentity.style || null,
+            color: mergedIdentity.color,
+            material: mergedIdentity.material,
+            hardware: aiIdentity.hardware || null,
+            pattern: aiIdentity.pattern || null,
+            year_range: aiIdentity.year_range || null,
+            category_primary: mergedIdentity.category_primary,
+            category_secondary:
+              aiIdentity.category_secondary || null,
+
+            condition_grade: conditionGrade || null,
+            condition_notes: gradingNotes || null,
+
+            length: dimensions?.length || "",
+            height: dimensions?.height || "",
+            depth: dimensions?.depth || "",
+            strap_drop: dimensions?.strap_drop || "",
+
+            ai_data: aiData || null,
+            images: images && images.length ? images : null,
+
+            retail_price,
+            comp_low: pricingPreview?.comp_low ?? null,
+            comp_high: pricingPreview?.comp_high ?? null,
+            emz_sale: emzSaleNumber,
+            currency: currency || "USD",
+
+            source: "intake",
+            notes: null,
+          },
+        ],
+        { onConflict: "item_number" }
+      );
+
+    if (error) {
+      console.error("Error saving inventory_items:", error);
+    }
+
+    return fullSlug;
+  } catch (err) {
+    console.error("Unexpected error in saveInventoryItem:", err);
+    // don’t throw — listings save should still succeed
+    return null;
+  }
+}
+
   async function handleSave() {
     setIsSaving(true);
     setErrorMsg("");
@@ -870,6 +993,25 @@ function IntakePageInner() {
         is_public: listForSale,
       };
 
+      // 1) Save/Upsert into inventory_items (SEO + QR slug)
+      await saveInventoryItem({
+        itemNumber: finalItemNumber,
+        brand: identity.brand,
+        model: identity.model,
+        category: identity.category_primary,
+        color: identity.color,
+        material: identity.material,
+        conditionGrade: condition,
+        gradingNotes,
+        dimensions,
+        aiData,
+        images: imagesPayload,
+        pricingPreview,
+        listingPrice,
+        currency,
+      });
+
+      // 2) Save into listings table (existing behavior)
       const { data, error } = await supabase
         .from("listings")
         .insert(payload)
@@ -902,32 +1044,38 @@ function IntakePageInner() {
   const safeItemNumberRaw = itemNumber || "(not assigned yet)";
   const safeItemNumber = escapeHtml(safeItemNumberRaw);
 
-  // Base origin (fallback to live site)
+  // Real site origin for public QR URL
   const origin =
     typeof window !== "undefined"
       ? window.location.origin
       : "https://emzloveluxury.com";
 
-  const itemPathId =
-    itemNumber && itemNumber !== "(not assigned yet)" ? itemNumber : "pending";
+  // Build slug for URL (Option C: ITEMNUMBER-brand-model)
+  const rawItemNumber =
+    itemNumber && itemNumber !== "(not assigned yet)" ? itemNumber : "";
 
-  // Future: this should match the public item detail route
-  const itemUrl = `${origin}/item/${encodeURIComponent(itemPathId)}`;
+  const slug = rawItemNumber
+    ? buildInventorySlug(rawItemNumber, brand, model)
+    : "pending";
 
-  // Use absolute URL to avoid issues in print popup
+  const itemUrl = `${origin}/item/${encodeURIComponent(slug)}`;
+
+  // Logo on tag
   const logoUrl =
     "https://emzloveluxury.com/emz-loveluxury-logo-horizontal.png";
 
-  // QR + barcode values
+  // QR code for PUBLIC URL
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
     itemUrl
-  )}&size=300x300&margin=0&format=png`;
+  )}&size=350x350&margin=0&format=png`;
 
+  // BARCODE still uses pure item_number (SKU)
+  const barcodeText = rawItemNumber || "PENDING";
   const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(
-    itemPathId
+    barcodeText
   )}&scale=3&includetext&background=ffffff`;
 
-  // Measurements line
+  // Safe fields
   const dimsParts = [];
   if (dimensions.length) dimsParts.push(`L: ${dimensions.length}`);
   if (dimensions.height) dimsParts.push(`H: ${dimensions.height}`);
@@ -935,60 +1083,6 @@ function IntakePageInner() {
   if (dimensions.strap_drop)
     dimsParts.push(`Strap Drop: ${dimensions.strap_drop}`);
 
-  // Feature bullets, Market Note, Pricing Insight from AI data
-  const featureBullets =
-    aiData?.description?.feature_bullets &&
-    Array.isArray(aiData.description.feature_bullets)
-      ? aiData.description.feature_bullets
-      : [];
-
-  const marketNote =
-    (aiData?.availability && aiData.availability.market_rarity) ||
-    aiData?.included_items_notes ||
-    "";
-
-  const pricingLines = [];
-  if (pricingPreview.retail_price) {
-    pricingLines.push(
-      `Retail (approx., often USD): ${pricingPreview.retail_price}`
-    );
-  }
-  if (pricingPreview.comp_low || pricingPreview.comp_high) {
-    const low = pricingPreview.comp_low || "";
-    const high = pricingPreview.comp_high || "";
-    if (low && high) {
-      pricingLines.push(`Observed resale range (approx.): ${low} – ${high}`);
-    } else if (low) {
-      pricingLines.push(`Observed resale range (approx.): from ${low}`);
-    } else if (high) {
-      pricingLines.push(`Observed resale range (approx.): up to ${high}`);
-    }
-  }
-  if (pricingPreview.recommended_listing) {
-    pricingLines.push(
-      `Internal anchor listing estimate: ${pricingPreview.recommended_listing}`
-    );
-  }
-  // NOTE: we intentionally do NOT include pricingPreview.whatnot_start on the card.
-
-  // Inclusions (for card left column only)
-  const freeformLines = (includedFreeform || "")
-    .split("\n")
-    .map((x) => x.trim())
-    .filter((x) => x.length > 0);
-
-  const compiledInclusions = [
-    includedItems.dust_bag ? "Dust bag" : null,
-    includedItems.box ? "Box" : null,
-    includedItems.strap ? "Strap" : null,
-    includedItems.auth_card ? "Authenticity card" : null,
-    includedItems.tags ? "Tags" : null,
-    includedItems.lock_and_key ? "Lock and key set" : null,
-    ...(includedItems.extras || []),
-    ...freeformLines,
-  ].filter(Boolean);
-
-  // Safe text for HTML
   const safeBrand = escapeHtml(brand || "");
   const safeModel = escapeHtml(model || "");
   const safeCategory = escapeHtml(category || "");
@@ -1000,7 +1094,8 @@ function IntakePageInner() {
   const safeNarrative = escapeHtml(curatorNarrative || "").trim();
 
   const retailHighRaw =
-    pricingPreview.comp_high !== null && pricingPreview.comp_high !== undefined
+    pricingPreview.comp_high !== null &&
+    pricingPreview.comp_high !== undefined
       ? String(pricingPreview.comp_high)
       : "";
   const safeRetailHigh = retailHighRaw ? escapeHtml(retailHighRaw) : "";
@@ -1011,473 +1106,206 @@ function IntakePageInner() {
       : "";
   const safeEmzSale = emzSaleRaw ? escapeHtml(emzSaleRaw) : "";
 
-  const hasPricingInsight = pricingLines.length > 0;
-  const hasMarketNote = !!marketNote;
-  const hasFeatures = featureBullets.length > 0;
-  const hasInclusions = compiledInclusions.length > 0;
+  // ------------------------- HTML TEMPLATE ------------------------------
 
   const html = `
-    <html>
-      <head>
-        <title>EMZLoveLuxury Print Card — ${safeItemNumber}</title>
-        <style>
-          @page {
-            size: Letter;
-            margin: 0.5in;
-          }
-          * {
-            box-sizing: border-box;
-          }
-          body {
-            margin: 0;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #f3f4f6;
-            color: #111827;
-          }
-          .page {
-            width: 100%;
-            max-width: 8.5in;
-            margin: 0 auto;
-          }
-          .card {
-            border-radius: 16px;
-            border: 1px solid #d4af37;
-            background: #ffffff;
-            padding: 16px 18px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-          }
-          .card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 8px;
-          }
-          .logo {
-            height: 40px;
-            width: auto;
-          }
-          .card-id {
-            text-align: right;
-            font-size: 11px;
-            color: #4b5563;
-            max-width: 260px;
-          }
-          .card-id-url {
-            font-size: 10px;
-            color: #6b7280;
-            margin-bottom: 3px;
-            word-break: break-all;
-          }
-          .card-id-label {
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.16em;
-            color: #6b7280;
-          }
-          .card-id-value {
-            font-size: 14px;
-            font-weight: 600;
-            color: #111827;
-          }
-          .card-id-brand {
-            font-size: 11px;
-            color: #4b5563;
-          }
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Print Card — ${safeItemNumber}</title>
 
-          .card-body {
-            display: grid;
-            grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.35fr);
-            gap: 18px;
-            margin-top: 8px;
-          }
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 30px;
+      color: #333;
+    }
 
-          .card-section-title {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.14em;
-            color: #6b7280;
-            margin-bottom: 4px;
-          }
+    .noclip {
+      page-break-inside: avoid;
+    }
 
-          .meta-list {
-            font-size: 11px;
-            line-height: 1.45;
-          }
-          .meta-list div {
-            margin-bottom: 2px;
-          }
-          .meta-label {
-            font-weight: 600;
-          }
+    h2 {
+      font-size: 18px;
+      margin-bottom: 4px;
+      color: #000;
+      letter-spacing: 0.5px;
+    }
 
-          .subsection-title {
-            margin-top: 8px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: #6b7280;
-          }
-          .subsection-body {
-            font-size: 11px;
-            line-height: 1.45;
-            margin-top: 2px;
-          }
-          .subsection-body ul {
-            margin: 2px 0 0 16px;
-            padding: 0;
-          }
-          .subsection-body li {
-            margin-bottom: 1px;
-          }
+    .section-header {
+      font-weight: bold;
+      font-size: 14px;
+      border-bottom: 1px solid #ddd;
+      margin-top: 20px;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      color: #000;
+    }
 
-          .narrative-box {
-            border-radius: 10px;
-            border: 1px solid #e5e7eb;
-            background: #f9fafb;
-            padding: 8px;
-            font-size: 11px;
-            min-height: 120px;
-          }
-          .narrative-box pre {
-            margin: 0;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-family: inherit;
-            font-size: 11px;
-            line-height: 1.45;
-          }
+    .gold-box {
+      border: 2px solid #facc15;
+      padding: 18px;
+      border-radius: 8px;
+      margin-bottom: 40px;
+    }
 
-          /* TAG STRIP (under the card, no dotted border around everything) */
-          .tag-strip {
-            margin-top: 16px;
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 40px;
+    }
+
+    .col {
+      flex: 1;
+    }
+
+    .tag-container {
+      width: 100%;
+      margin-top: 20px;
+    }
+
+    .tag-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      width: 100%;
+      margin-bottom: 30px;
+    }
+
+    .tag {
+      flex: 1;
+      border: 2px solid #555;
+      border-radius: 10px;
+      padding: 20px;
+      height: 240px; /* ← TALLER TAGS */
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .tag-logo-center {
+      width: 160px;
+      opacity: 0.9;
+    }
+
+    .tag-info {
+      font-size: 12px;
+      line-height: 1.35;
+      letter-spacing: 0.4px;
+    }
+
+    .tag-price {
+      margin-top: 6px;
+      font-size: 12px;
+    }
+
+    .barcode {
+      width: 220px;
+      height: 60px;
+    }
+
+    .qr {
+      width: 90px;
+      height: 90px;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      font-size: 12px;
+      color: #777;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ===================================== -->
+  <!--        PRINT CARD (Gold Box)          -->
+  <!-- ===================================== -->
+
+  <div class="gold-box noclip">
+
+    <h2>ITEM INFORMATION</h2>
+    <div class="row">
+      <div class="col">
+        <p><strong>Item #:</strong> ${safeItemNumber}</p>
+        <p><strong>Brand:</strong> ${safeBrand}</p>
+        <p><strong>Model:</strong> ${safeModel}</p>
+        <p><strong>Category:</strong> ${safeCategory}</p>
+        <p><strong>Color:</strong> ${safeColor}</p>
+        <p><strong>Material:</strong> ${safeMaterial}</p>
+        <p><strong>Condition Grade:</strong> ${safeCondition}</p>
+        <p><strong>Condition Notes:</strong> ${safeNotes}</p>
+        ${
+          dimsParts.length
+            ? `<p><strong>Measurements:</strong> ${dimsParts.join(" • ")}</p>`
+            : ""
+        }
+      </div>
+
+      <div class="col">
+        <h3 class="section-header">EMZCURATOR DESCRIPTION</h3>
+        <p style="white-space: pre-wrap; font-size: 13px;">${safeNarrative}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================== -->
+  <!--                TAGS                   -->
+  <!-- ===================================== -->
+
+  <div class="tag-container">
+
+    <!-- TOP TAG STRIP -->
+    <div class="tag-row noclip">
+      <!-- LEFT TAG (Barcode side) -->
+      <div class="tag">
+        <div class="tag-info">
+          <strong>ITEM #:</strong> ${safeItemNumber}<br/>
+          <strong>Brand:</strong> ${safeBrand}<br/>
+          <strong>Retail High (Comp):</strong> ${safeRetailHigh}<br/>
+          ${
+            safeEmzSale
+              ? `<strong>EMZSale:</strong> ${safeEmzSale}<br/>`
+              : ""
           }
-          .tag-row {
-            border-radius: 10px;
-            border: 1px solid #111827;
-            background: #ffffff;
-            padding: 12px 10px;
-            height: 180px; /* make tag taller */
-            display: grid;
-            grid-template-columns: 1.7fr 1fr 1fr 1.7fr;
-            align-items: stretch;
-            gap: 4px;
-            margin-bottom: 10px;
-          }
-          .tag-cell {
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            font-size: 10px;
-          }
-          .tag-cell.logo-cell {
-            align-items: center;
-            justify-content: center;
-            border-left: 1px dashed #d1d5db;
-            border-right: 1px dashed #d1d5db;
-          }
-          .tag-logo {
-            height: 60px;
-            width: auto;
-            display: block;
-          }
-          .tag-lines-top {
-            margin-bottom: 6px;
-          }
-          .tag-line-label {
-            font-size: 9px;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: #6b7280;
-          }
-          .tag-line-value {
-            font-size: 11px;
-            font-weight: 600;
-            color: #111827;
-          }
-          .tag-line-sub {
-            font-size: 10px;
-            color: #374151;
-          }
-          .tag-line-price {
-            font-size: 10px;
-            color: #111827;
-          }
-          .tag-line-price span {
-            font-weight: 600;
-          }
-          .tag-code-wrap {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-top: 4px;
-          }
-          .qr-img,
-          .barcode-img {
-            max-height: 90px;
-            max-width: 100%;
-            display: block;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="page">
-          <div class="card">
-            <div class="card-header">
-              <img src="${logoUrl}" class="logo" alt="EMZLoveLuxury" />
-              <div class="card-id">
-                <div class="card-id-url">${safeItemUrl}</div>
-                <div class="card-id-label">Item ID / SKU</div>
-                <div class="card-id-value">${safeItemNumber}</div>
-                <div class="card-id-brand">
-                  ${safeBrand}${safeModel ? " · " + safeModel : ""}
-                </div>
-              </div>
-            </div>
-
-            <div class="card-body">
-              <!-- LEFT COLUMN: item info + features + market + pricing + inclusions -->
-              <div>
-                <div class="card-section-title">Item Information</div>
-                <div class="meta-list">
-                  <div><span class="meta-label">Brand:</span> ${
-                    safeBrand || "—"
-                  }</div>
-                  <div><span class="meta-label">Model:</span> ${
-                    safeModel || "—"
-                  }</div>
-                  <div><span class="meta-label">Category:</span> ${
-                    safeCategory || "—"
-                  }</div>
-                  <div><span class="meta-label">Color:</span> ${
-                    safeColor || "—"
-                  }</div>
-                  <div><span class="meta-label">Material:</span> ${
-                    safeMaterial || "—"
-                  }</div>
-                  <div><span class="meta-label">Condition Grade:</span> ${
-                    safeCondition || "—"
-                  }</div>
-                  <div><span class="meta-label">Condition Notes:</span> ${
-                    safeNotes || "—"
-                  }</div>
-                  ${
-                    dimsParts.length > 0
-                      ? `<div style="margin-top:4px;"><span class="meta-label">Measurements:</span> ${escapeHtml(
-                          dimsParts.join(" · ")
-                        )}</div>`
-                      : ""
-                  }
-                </div>
-
-                ${
-                  hasFeatures
-                    ? `
-                <div class="subsection-title">Key Features</div>
-                <div class="subsection-body">
-                  <ul>
-                    ${featureBullets
-                      .map((f) => `<li>${escapeHtml(String(f))}</li>`)
-                      .join("")}
-                  </ul>
-                </div>
-                `
-                    : ""
-                }
-
-                ${
-                  hasMarketNote
-                    ? `
-                <div class="subsection-title">Market Note</div>
-                <div class="subsection-body">
-                  ${escapeHtml(marketNote)}
-                </div>
-                `
-                    : ""
-                }
-
-                ${
-                  hasPricingInsight
-                    ? `
-                <div class="subsection-title">Pricing Insight</div>
-                <div class="subsection-body">
-                  ${pricingLines
-                    .map((line) => escapeHtml(line))
-                    .join("<br />")}
-                </div>
-                `
-                    : ""
-                }
-
-                ${
-                  hasInclusions
-                    ? `
-                <div class="subsection-title">Inclusions</div>
-                <div class="subsection-body">
-                  ${compiledInclusions
-                    .map((inc) => `• ${escapeHtml(inc)}`)
-                    .join("<br />")}
-                </div>
-                `
-                    : ""
-                }
-              </div>
-
-              <!-- RIGHT COLUMN: EMZCurator narrative only -->
-              <div>
-                <div class="card-section-title">EMZCurator Description &amp; Comps</div>
-                <div class="narrative-box">
-                  <pre>${
-                    safeNarrative ||
-                    "Run EMZCurator AI to generate a structured summary for this item."
-                  }</pre>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- TAGS BELOW THE CARD (no gold border, no cutline text) -->
-          <div class="tag-strip">
-            <!-- Tag strip 1 -->
-            <div class="tag-row">
-              <!-- Far left: Item / Brand / Prices + BARCODE -->
-              <div class="tag-cell">
-                <div class="tag-lines-top">
-                  <div class="tag-line-label">Item #</div>
-                  <div class="tag-line-value">${safeItemNumber}</div>
-                  <div class="tag-line-label" style="margin-top:4px;">Brand</div>
-                  <div class="tag-line-sub">${
-                    safeBrand || "&mdash;"
-                  }</div>
-                </div>
-                <div>
-                  ${
-                    safeRetailHigh
-                      ? `<div class="tag-line-price">Retail High (Comp): <span>${safeRetailHigh}</span></div>`
-                      : ""
-                  }
-                  ${
-                    safeEmzSale
-                      ? `<div class="tag-line-price">EMZ Sale: <span>${safeEmzSale}</span></div>`
-                      : ""
-                  }
-                </div>
-                <div class="tag-code-wrap">
-                  <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
-                </div>
-              </div>
-
-              <!-- Center left: EMZ logo (fold side A) -->
-              <div class="tag-cell logo-cell">
-                <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-              </div>
-
-              <!-- Center right: EMZ logo (fold side B) -->
-              <div class="tag-cell logo-cell">
-                <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-              </div>
-
-              <!-- Far right: Item / Brand / Prices + QR -->
-              <div class="tag-cell">
-                <div class="tag-lines-top">
-                  <div class="tag-line-label">Item #</div>
-                  <div class="tag-line-value">${safeItemNumber}</div>
-                  <div class="tag-line-label" style="margin-top:4px;">Brand</div>
-                  <div class="tag-line-sub">${
-                    safeBrand || "&mdash;"
-                  }</div>
-                </div>
-                <div>
-                  ${
-                    safeRetailHigh
-                      ? `<div class="tag-line-price">Retail High (Comp): <span>${safeRetailHigh}</span></div>`
-                      : ""
-                  }
-                  ${
-                    safeEmzSale
-                      ? `<div class="tag-line-price">EMZ Sale: <span>${safeEmzSale}</span></div>`
-                      : ""
-                  }
-                </div>
-                <div class="tag-code-wrap">
-                  <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
-                </div>
-              </div>
-            </div>
-
-            <!-- Tag strip 2 (duplicate) -->
-            <div class="tag-row">
-              <!-- Far left: Item / Brand / Prices + BARCODE -->
-              <div class="tag-cell">
-                <div class="tag-lines-top">
-                  <div class="tag-line-label">Item #</div>
-                  <div class="tag-line-value">${safeItemNumber}</div>
-                  <div class="tag-line-label" style="margin-top:4px;">Brand</div>
-                  <div class="tag-line-sub">${
-                    safeBrand || "&mdash;"
-                  }</div>
-                </div>
-                <div>
-                  ${
-                    safeRetailHigh
-                      ? `<div class="tag-line-price">Retail High (Comp): <span>${safeRetailHigh}</span></div>`
-                      : ""
-                  }
-                  ${
-                    safeEmzSale
-                      ? `<div class="tag-line-price">EMZ Sale: <span>${safeEmzSale}</span></div>`
-                      : ""
-                  }
-                </div>
-                <div class="tag-code-wrap">
-                  <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
-                </div>
-              </div>
-
-              <!-- Center left: EMZ logo (fold side A) -->
-              <div class="tag-cell logo-cell">
-                <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-              </div>
-
-              <!-- Center right: EMZ logo (fold side B) -->
-              <div class="tag-cell logo-cell">
-                <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-              </div>
-
-              <!-- Far right: Item / Brand / Prices + QR -->
-              <div class="tag-cell">
-                <div class="tag-lines-top">
-                  <div class="tag-line-label">Item #</div>
-                  <div class="tag-line-value">${safeItemNumber}</div>
-                  <div class="tag-line-label" style="margin-top:4px;">Brand</div>
-                  <div class="tag-line-sub">${
-                    safeBrand || "&mdash;"
-                  }</div>
-                </div>
-                <div>
-                  ${
-                    safeRetailHigh
-                      ? `<div class="tag-line-price">Retail High (Comp): <span>${safeRetailHigh}</span></div>`
-                      : ""
-                  }
-                  ${
-                    safeEmzSale
-                      ? `<div class="tag-line-price">EMZ Sale: <span>${safeEmzSale}</span></div>`
-                      : ""
-                  }
-                </div>
-                <div class="tag-code-wrap">
-                  <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
-      </body>
-    </html>
-  `;
 
+        <img src="${logoUrl}" class="tag-logo-center" />
+
+        <div style="text-align:right;">
+          <img class="barcode" src="${barcodeUrl}" />
+        </div>
+      </div>
+
+      <!-- RIGHT TAG (QR code side) -->
+      <div class="tag">
+        <img src="${logoUrl}" class="tag-logo-center" />
+
+        <div class="tag-info">
+          <strong>ITEM #:</strong> ${safeItemNumber}<br/>
+          <strong>Brand:</strong> ${safeBrand}<br/>
+          <strong>Retail High (Comp):</strong> ${safeRetailHigh}<br/>
+        </div>
+
+        <div style="text-align:right;">
+          <img class="qr" src="${qrUrl}" />
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>EMZLoveLuxury.com</footer>
+
+</body>
+</html>
+`;
+
+  // OPEN PRINT WINDOW
   const printWindow = window.open("printcard://emzloveluxury.com", "_blank");
   if (printWindow) {
     printWindow.document.write(html);
@@ -1485,7 +1313,7 @@ function IntakePageInner() {
     printWindow.focus();
     printWindow.print();
   } else {
-    alert("Popup blocked. Please allow popups for this site to print.");
+    alert("Popup blocked. Please allow popups for this site.");
   }
 }
 
