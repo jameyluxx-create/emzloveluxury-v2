@@ -1861,22 +1861,21 @@ function handlePrintCard() {
           />
 
           <label style={labelStyle}>Condition Grade (required)</label>
-          <select
-            value={condition}
-            onChange={(e) => setCondition(e.target.value)}
-            style={inputStyle}
-          >
-            <option value="">Select grade…</option>
-            <option value="N">N – New</option>
-            <option value="A">A – Pristine or Unused Condition</option>
-            <option value="B">
-              B – Excellent Preloved with Minor Callouts
-            </option>
-            <option value="C">
-              C – Functional With Signs of Usage
-            </option>
-            <option value="D">D – Project</option>
-            <option value="U">U – Contemporary Brand</option>
+<select
+  value={condition}
+  onChange={(e) => setCondition(e.target.value)}
+  style={inputStyle}
+>
+  <option value="">Select grade…</option>
+  <option value="S">S – Brand New</option>
+  <option value="SA">SA – Unused</option>
+  <option value="A">A – Excellent</option>
+  <option value="AB">AB – Good</option>
+  <option value="B">B – Average</option>
+  <option value="C">C – Damaged</option>
+  <option value="U">U – Contemporary Brand</option>
+</select>
+
           </select>
           <p
             style={{
