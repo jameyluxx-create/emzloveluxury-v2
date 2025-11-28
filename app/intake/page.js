@@ -956,7 +956,7 @@ function IntakePageInner() {
       `Internal anchor listing estimate: ${pricingPreview.recommended_listing}`
     );
   }
-  // NOTE: We intentionally do NOT include pricingPreview.whatnot_start on the card.
+  // NOTE: We intentionally do NOT include pricingPreview.whatnot_start.
 
   // Inclusions (bottom of left column)
   const freeformLines = (includedFreeform || "")
@@ -989,6 +989,27 @@ function IntakePageInner() {
   const hasMarketNote = !!marketNote;
   const hasFeatures = featureBullets.length > 0;
   const hasInclusions = compiledInclusions.length > 0;
+
+  // Price line for tags (Retail + EMZSale)
+  const tagPriceHtml = (() => {
+    const parts = [];
+    if (pricingPreview.retail_price) {
+      parts.push(
+        `<span class="tag-retail">Retail: ${escapeHtml(
+          String(pricingPreview.retail_price)
+        )}</span>`
+      );
+    }
+    if (pricingPreview.recommended_listing) {
+      parts.push(
+        `<span class="tag-our">EMZSale: ${escapeHtml(
+          String(pricingPreview.recommended_listing)
+        )}</span>`
+      );
+    }
+    if (!parts.length) return "";
+    return `<div class="tag-price-row">${parts.join(" · ")}</div>`;
+  })();
 
   const html = `
     <html>
@@ -1123,7 +1144,7 @@ function IntakePageInner() {
             line-height: 1.45;
           }
 
-          /* Tag block at bottom (no text, just dashed divider + tags) */
+          /* Tag block & foldable tag design */
           .tag-block {
             margin-top: 14px;
           }
@@ -1140,49 +1161,95 @@ function IntakePageInner() {
             flex-direction: column;
             gap: 4px;
           }
+
           .tag-row {
             border-radius: 12px;
             border: 1px solid #111827;
             background: #ffffff;
             padding: 4px 8px;
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            min-height: 0.9in;
+            flex-direction: column;
+            min-height: 1.6in;
           }
-          .tag-left,
-          .tag-center,
-          .tag-right {
+
+          .tag-face {
+            flex: 1;
             display: flex;
             align-items: center;
             justify-content: center;
           }
-          .tag-left,
-          .tag-right {
-            width: 90px;
+
+          /* Optional light line where the fold will be */
+          .tag-divider {
+            border-top: 1px dashed #e5e7eb;
+            margin: 2px 0;
           }
-          .tag-center {
+
+          .tag-face-inner {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+          }
+
+          .tag-code {
+            width: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .tag-middle {
             flex: 1;
+            display: flex;
             flex-direction: column;
+            align-items: center;
             text-align: center;
+            gap: 2px;
           }
+
+          .tag-logo-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 1px;
+          }
+
           .tag-logo {
-            height: 20px;
+            height: 18px;
             width: auto;
-            margin-bottom: 2px;
           }
-          .tag-middle-text {
+
+          .tag-text-main {
             font-size: 9px;
+            line-height: 1.3;
+          }
+
+          .tag-brand {
+            font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.12em;
+          }
+
+          .tag-sku {
+            margin-left: 4px;
+          }
+
+          .tag-price-row {
+            font-size: 8px;
+            line-height: 1.3;
+            margin-top: 1px;
+          }
+
+          .tag-retail {
             color: #4b5563;
           }
-          .tag-id {
-            font-size: 10px;
+
+          .tag-our {
             font-weight: 600;
-            color: #111827;
-            margin-top: 2px;
           }
+
           .qr-img,
           .barcode-img {
             max-height: 60px;
@@ -1293,36 +1360,88 @@ function IntakePageInner() {
             </div>
           </div>
 
-          <!-- TAGS BLOCK (no text, just dashed divider + two tags) -->
+          <!-- TAGS BLOCK: two identical foldable tag strips -->
           <div class="tag-block">
             <div class="cutline"></div>
 
             <div class="tags-wrapper">
               <div class="tag-row">
-                <div class="tag-left">
-                  <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
+                <div class="tag-face">
+                  <div class="tag-face-inner">
+                    <div class="tag-code">
+                      <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
+                    </div>
+                    <div class="tag-middle">
+                      <div class="tag-logo-row">
+                        <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                        <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                      </div>
+                      <div class="tag-text-main">
+                        <span class="tag-brand">${safeBrand || ""}</span>
+                        <span class="tag-sku">#${escapeHtml(safeItemNumber)}</span>
+                      </div>
+                      ${tagPriceHtml}
+                    </div>
+                  </div>
                 </div>
-                <div class="tag-center">
-                  <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-                  <div class="tag-middle-text">EMZLOVELUXURY INVENTORY</div>
-                  <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
-                </div>
-                <div class="tag-right">
-                  <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
+                <div class="tag-divider"></div>
+                <div class="tag-face">
+                  <div class="tag-face-inner">
+                    <div class="tag-code">
+                      <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
+                    </div>
+                    <div class="tag-middle">
+                      <div class="tag-logo-row">
+                        <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                        <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                      </div>
+                      <div class="tag-text-main">
+                        <span class="tag-brand">${safeBrand || ""}</span>
+                        <span class="tag-sku">#${escapeHtml(safeItemNumber)}</span>
+                      </div>
+                      ${tagPriceHtml}
+                    </div>
+                  </div>
                 </div>
               </div>
 
               <div class="tag-row">
-                <div class="tag-left">
-                  <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
+                <div class="tag-face">
+                  <div class="tag-face-inner">
+                    <div class="tag-code">
+                      <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
+                    </div>
+                    <div class="tag-middle">
+                      <div class="tag-logo-row">
+                        <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                        <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                      </div>
+                      <div class="tag-text-main">
+                        <span class="tag-brand">${safeBrand || ""}</span>
+                        <span class="tag-sku">#${escapeHtml(safeItemNumber)}</span>
+                      </div>
+                      ${tagPriceHtml}
+                    </div>
+                  </div>
                 </div>
-                <div class="tag-center">
-                  <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-                  <div class="tag-middle-text">EMZLOVELUXURY INVENTORY</div>
-                  <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
-                </div>
-                <div class="tag-right">
-                  <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
+                <div class="tag-divider"></div>
+                <div class="tag-face">
+                  <div class="tag-face-inner">
+                    <div class="tag-code">
+                      <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
+                    </div>
+                    <div class="tag-middle">
+                      <div class="tag-logo-row">
+                        <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                        <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                      </div>
+                      <div class="tag-text-main">
+                        <span class="tag-brand">${safeBrand || ""}</span>
+                        <span class="tag-sku">#${escapeHtml(safeItemNumber)}</span>
+                      </div>
+                      ${tagPriceHtml}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
