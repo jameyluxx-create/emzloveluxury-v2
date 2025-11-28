@@ -160,13 +160,16 @@ const MODEL_CODE_MAP = {
   clutch: "CLT",
 };
 
-// EMZCurator narrative builder (clean, neutral, no condition or pricing language)
+// EMZCurator narrative builder (sectioned, neutral, user-grade-aware)
 function buildCuratorNarrative({ aiResult, override }) {
-  if (!aiResult) return "";
+  if (!aiResult) {
+    return "Run EMZCurator AI to generate a narrative for this item.";
+  }
 
   const identity = aiResult.identity || {};
   const dims = aiResult.dimensions || {};
   const description = aiResult.description || {};
+  const availability = aiResult.availability || {};
 
   // Identity fields (prioritizing override, then AI)
   const brand = override.brand || identity.brand || "";
@@ -175,6 +178,9 @@ function buildCuratorNarrative({ aiResult, override }) {
   const color = override.color || identity.color || "";
   const material = override.material || identity.material || "";
 
+  // User-supplied condition grade (S, SA, A, AB, B, C, U)
+  const conditionGrade = override.condition || "";
+
   // Measurements
   const measurementsParts = [];
   if (dims.length) measurementsParts.push(`L: ${dims.length}`);
@@ -182,86 +188,150 @@ function buildCuratorNarrative({ aiResult, override }) {
   if (dims.depth) measurementsParts.push(`D: ${dims.depth}`);
   if (dims.strap_drop) measurementsParts.push(`Strap Drop: ${dims.strap_drop}`);
 
-  const paragraphs = [];
+  const measurementsText =
+    measurementsParts.length > 0 ? measurementsParts.join(" · ") : "";
+
+  // Small helper to normalize whitespace
+  const clean = (txt) =>
+    (txt || "").trim().replace(/\s+/g, " ");
+
+  const sections = [];
 
   //
-  // 1) Identity / Intro Paragraph
+  // 1) IDENTITY & ORIGIN
   //
-  const hasIdentityFields = brand || model || category || color || material;
+  {
+    const lines = [];
 
-  if (hasIdentityFields) {
-    const nameParts = [];
-    if (brand) nameParts.push(brand);
-    if (model) nameParts.push(model);
-    const identifier = nameParts.join(" ").trim();
+    const hasIdentityFields = brand || model || category || color || material;
 
-    const role = category
-      ? `${category} within the ${brand || ""} lineup`.trim()
-      : "piece";
+    if (hasIdentityFields) {
+      const nameParts = [];
+      if (brand) nameParts.push(brand);
+      if (model) nameParts.push(model);
+      const identifier = nameParts.join(" ").trim();
 
-    const surfaceParts = [];
-    if (color) surfaceParts.push(color);
-    if (material) surfaceParts.push(material);
+      const role = category
+        ? `a ${category} piece`
+        : "an item";
 
-    const surfaceText =
-      surfaceParts.length > 0 ? ` in ${surfaceParts.join(" ")}` : "";
+      const surfaceParts = [];
+      if (color) surfaceParts.push(color);
+      if (material) surfaceParts.push(material);
+      const surfaceText =
+        surfaceParts.length > 0 ? ` in ${surfaceParts.join(" ")}` : "";
 
-    const introSentence = identifier
-      ? `${identifier} is identified as a ${role}${surfaceText}.`
-      : `This item is identified as a ${role}${surfaceText}.`;
+      const introSentence = identifier
+        ? `${identifier} is identified as ${role}${surfaceText}.`
+        : `This item is identified as ${role}${surfaceText}.`;
 
-    paragraphs.push(introSentence.trim());
+      lines.push(introSentence.trim());
+    }
+
+    if (clean(description.model_notes)) {
+      lines.push(clean(description.model_notes));
+    }
+
+    if (measurementsText) {
+      lines.push(
+        `Typical measurements for this style are approximately ${measurementsText}.`
+      );
+    }
+
+    if (lines.length > 0) {
+      sections.push({
+        header: "IDENTITY & ORIGIN",
+        body: lines.join("\n\n"),
+      });
+    }
   }
 
   //
-  // 2) Model Notes
+  // 2) DESIGN & FUNCTION
   //
-  if (description.model_notes) {
-    paragraphs.push(description.model_notes.trim());
+  {
+    const lines = [];
+
+    if (clean(description.history)) {
+      lines.push(clean(description.history));
+    }
+
+    if (clean(description.styling)) {
+      lines.push(clean(description.styling));
+    }
+
+    if (lines.length > 0) {
+      sections.push({
+        header: "DESIGN & FUNCTION",
+        body: lines.join("\n\n"),
+      });
+    }
   }
 
   //
-  // 3) History / Collection Context
+  // 3) MARKET & RARITY
   //
-  if (description.history) {
-    paragraphs.push(description.history.trim());
+  {
+    const lines = [];
+
+    const marketNote = clean(availability.market_rarity);
+    const similar = availability.similar_items_found;
+
+    if (marketNote) {
+      lines.push(marketNote);
+    }
+
+    if (similar !== null && similar !== undefined) {
+      lines.push(
+        `Approximate comparable availability: ${similar} similar item${similar === 1 ? "" : "s"} observed in major resale markets.`
+      );
+    }
+
+    if (clean(description.sales_forward)) {
+      lines.push(clean(description.sales_forward));
+    }
+
+    if (lines.length > 0) {
+      sections.push({
+        header: "MARKET & RARITY",
+        body: lines.join("\n\n"),
+      });
+    }
   }
 
   //
-  // 4) Styling / Use Context
+  // 4) USER CONDITION GRADE (user-entered, not AI)
   //
-  if (description.styling) {
-    paragraphs.push(description.styling.trim());
+  if (conditionGrade) {
+    const gradeMap = {
+      S: "S – Brand New",
+      SA: "SA – Unused",
+      A: "A – Excellent",
+      AB: "AB – Good",
+      B: "B – Average",
+      C: "C – Damaged",
+      U: "U – Contemporary Brand",
+    };
+
+    sections.push({
+      header: "USER CONDITION GRADE",
+      body: gradeMap[conditionGrade] || conditionGrade,
+    });
   }
 
   //
-  // 5) Measurements (if available)
+  // Final output — headers + underlines for readability in <pre>
   //
-  if (measurementsParts.length > 0) {
-    paragraphs.push(
-      `Typical measurements for this style are approximately ${measurementsParts.join(
-        " · "
-      )}.`
-    );
-  }
-
-  //
-  // 6) Closing Line (sales_forward)
-  //
-  if (description.sales_forward) {
-    paragraphs.push(description.sales_forward.trim());
-  }
-
-  //
-  // Final output (clean paragraphs)
-  //
-  const finalNarrative = paragraphs
-    .map((p) => (typeof p === "string" ? p.trim() : ""))
-    .filter((p) => p.length > 0)
-    .join("\n\n");
+  const finalNarrative = sections
+    .map(
+      (sec) =>
+        `${sec.header}\n${"-".repeat(sec.header.length)}\n${sec.body}`
+    )
+    .join("\n\n\n");
 
   return (
-    finalNarrative || "Run EMZCurator AI to generate a narrative for this item."
+    finalNarrative ||
+    "Run EMZCurator AI to generate a narrative for this item."
   );
 }
 
@@ -290,16 +360,9 @@ function buildSearchKeywords({ identity, narrative, includedItems }) {
   return Array.from(keywords);
 }
 
-const placeholderImages = [
-  "/placeholders/Emzthumb-+AddMain.png",
-  "/placeholders/Emzthumb-+AddFront.png",
-  "/placeholders/Emzthumb-+AddBack.png",
-  "/placeholders/Emzthumb-+AddInside.png",
-  "/placeholders/Emzthumb-+AddLabel.png",
-  "/placeholders/Emzthumb-+AddAuthTags.png",
-];
 
 // -------------------------- main component -------------------------
+
 function IntakePageInner() {
   // User — we will later wire this to real auth
   const currentUserId = "demo-user-123";
@@ -837,12 +900,12 @@ function handlePrintCard() {
   const itemPathId =
     itemNumber && itemNumber !== "(not assigned yet)" ? itemNumber : "pending";
 
-  // Future: this should match the public item detail route
+  // Public item detail URL
   const itemUrl = `${origin}/item/${encodeURIComponent(itemPathId)}`;
 
   const logoUrl = `${origin}/emz-loveluxury-logo-horizontal.png`;
 
-  // QR + barcode values
+  // QR + barcode
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
     itemUrl
   )}&size=200x200&margin=0`;
@@ -851,18 +914,16 @@ function handlePrintCard() {
     itemPathId
   )}&scale=2&includetext&background=ffffff`;
 
-  // Measurements line
+  // Measurements
   const dimsParts = [];
   if (dimensions.length) dimsParts.push(`L: ${dimensions.length}`);
   if (dimensions.height) dimsParts.push(`H: ${dimensions.height}`);
   if (dimensions.depth) dimsParts.push(`D: ${dimensions.depth}`);
-  if (dimensions.strap_drop)
-    dimsParts.push(`Strap Drop: ${dimensions.strap_drop}`);
+  if (dimensions.strap_drop) dimsParts.push(`Strap Drop: ${dimensions.strap_drop}`);
 
-  // Feature bullets, Market Note, Pricing Insight from AI data
+  // AI data
   const featureBullets =
-    aiData?.description?.feature_bullets &&
-    Array.isArray(aiData.description.feature_bullets)
+    aiData?.description?.feature_bullets && Array.isArray(aiData.description.feature_bullets)
       ? aiData.description.feature_bullets
       : [];
 
@@ -873,9 +934,7 @@ function handlePrintCard() {
 
   const pricingLines = [];
   if (pricingPreview.retail_price) {
-    pricingLines.push(
-      `Retail (approx., often USD): ${pricingPreview.retail_price}`
-    );
+    pricingLines.push(`Retail (approx., often USD): ${pricingPreview.retail_price}`);
   }
   if (pricingPreview.comp_low || pricingPreview.comp_high) {
     const low = pricingPreview.comp_low || "";
@@ -889,14 +948,10 @@ function handlePrintCard() {
     }
   }
   if (pricingPreview.recommended_listing) {
-    pricingLines.push(
-      `Internal anchor listing estimate: ${pricingPreview.recommended_listing}`
-    );
+    pricingLines.push(`Internal anchor listing estimate: ${pricingPreview.recommended_listing}`);
   }
-  // NOTE: We intentionally do NOT include pricingPreview.whatnot_start
-  //       per your request to remove "Suggested Whatnot start" from the card.
 
-  // Inclusions (small section at the very bottom of left column, optional)
+  // Inclusions
   const freeformLines = (includedFreeform || "")
     .split("\n")
     .map((x) => x.trim())
@@ -921,13 +976,34 @@ function handlePrintCard() {
   const safeCondition = escapeHtml(condition || "");
   const safeNotes = escapeHtml(gradingNotes || "");
   const safeItemUrl = escapeHtml(itemUrl);
-  const safeNarrative = escapeHtml(curatorNarrative || "").trim();
+
+  // Convert narrative into styled HTML blocks
+  function convertNarrativeToHtml(narrativeText) {
+    if (!narrativeText) return "";
+
+    const sections = narrativeText.split(/\n\n\n+/); // separated by 3 newlines
+
+    return sections
+      .map((block) => {
+        const [headerLine, ...bodyLines] = block.split("\n");
+        return `
+          <div class="narrative-section">
+            <div class="narrative-heading">${escapeHtml(headerLine)}</div>
+            <div class="narrative-body">${escapeHtml(bodyLines.join("\n"))}</div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  const safeNarrativeHtml = convertNarrativeToHtml(curatorNarrative);
 
   const hasPricingInsight = pricingLines.length > 0;
   const hasMarketNote = !!marketNote;
   const hasFeatures = featureBullets.length > 0;
   const hasInclusions = compiledInclusions.length > 0;
 
+  // Full HTML print doc
   const html = `
     <html>
       <head>
@@ -937,33 +1013,21 @@ function handlePrintCard() {
             size: Letter;
             margin: 0.5in;
           }
-          html, body {
-            height: 100%;
-          }
-          * {
-            box-sizing: border-box;
-          }
+
+          * { box-sizing: border-box; }
           body {
             margin: 0;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
             background: #f3f4f6;
             color: #111827;
           }
+
           .page {
-            /* Approximate usable height of Letter page minus margins */
-            height: 10.5in;
+            width: 100%;
             max-width: 8.5in;
             margin: 0 auto;
-            display: flex;
-            flex-direction: column;
           }
-          .top-content {
-            flex: 1 1 auto;
-          }
-          .tag-strip-container {
-            flex-shrink: 0;
-            margin-top: 12px;
-          }
+
           .card {
             border-radius: 16px;
             border: 1px solid #d4af37;
@@ -971,6 +1035,7 @@ function handlePrintCard() {
             padding: 16px 18px;
             box-shadow: 0 8px 20px rgba(0,0,0,0.08);
           }
+
           .card-header {
             display: flex;
             align-items: center;
@@ -978,33 +1043,39 @@ function handlePrintCard() {
             gap: 16px;
             margin-bottom: 8px;
           }
+
           .logo {
             height: 40px;
             width: auto;
           }
+
           .card-id {
             text-align: right;
             font-size: 11px;
             color: #4b5563;
             max-width: 260px;
           }
+
           .card-id-url {
             font-size: 10px;
             color: #6b7280;
             margin-bottom: 3px;
             word-break: break-all;
           }
+
           .card-id-label {
             font-size: 10px;
             text-transform: uppercase;
             letter-spacing: 0.16em;
             color: #6b7280;
           }
+
           .card-id-value {
             font-size: 14px;
             font-weight: 600;
             color: #111827;
           }
+
           .card-id-brand {
             font-size: 11px;
             color: #4b5563;
@@ -1029,12 +1100,9 @@ function handlePrintCard() {
             font-size: 11px;
             line-height: 1.45;
           }
-          .meta-list div {
-            margin-bottom: 2px;
-          }
-          .meta-label {
-            font-weight: 600;
-          }
+
+          .meta-list div { margin-bottom: 2px; }
+          .meta-label { font-weight: 600; }
 
           .subsection-title {
             margin-top: 8px;
@@ -1044,36 +1112,35 @@ function handlePrintCard() {
             letter-spacing: 0.12em;
             color: #6b7280;
           }
+
           .subsection-body {
             font-size: 11px;
             line-height: 1.45;
             margin-top: 2px;
           }
-          .subsection-body ul {
-            margin: 2px 0 0 16px;
-            padding: 0;
-          }
-          .subsection-body li {
-            margin-bottom: 1px;
+
+          .subsection-body ul { margin: 2px 0 0 16px; padding: 0; }
+          .subsection-body li { margin-bottom: 1px; }
+
+          /* Narrative styling */
+          .narrative-section { margin-bottom: 12px; }
+
+          .narrative-heading {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 3px;
+            color: #374151;
           }
 
-          .narrative-box {
-            border-radius: 10px;
-            border: 1px solid #e5e7eb;
-            background: #f9fafb;
-            padding: 8px;
-            font-size: 11px;
-            min-height: 120px;
-          }
-          .narrative-box pre {
-            margin: 0;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-family: inherit;
+          .narrative-body {
             font-size: 11px;
             line-height: 1.45;
+            white-space: pre-wrap;
           }
 
+          /* Cut + Tags */
           .cutline {
             margin-top: 18px;
             border-top: 1px dashed #9ca3af;
@@ -1082,6 +1149,7 @@ function handlePrintCard() {
             color: #6b7280;
             padding-top: 4px;
           }
+
           .fold-note {
             font-size: 9px;
             color: #6b7280;
@@ -1090,10 +1158,12 @@ function handlePrintCard() {
           }
 
           .tag-strip {
+            margin-top: 8px;
             display: flex;
             flex-direction: column;
             gap: 6px;
           }
+
           .tag-row {
             border-radius: 10px;
             border: 1px solid #111827;
@@ -1103,6 +1173,7 @@ function handlePrintCard() {
             align-items: center;
             justify-content: space-between;
           }
+
           .tag-left,
           .tag-center,
           .tag-right {
@@ -1110,32 +1181,35 @@ function handlePrintCard() {
             align-items: center;
             justify-content: center;
           }
-          .tag-left,
-          .tag-right {
-            width: 90px;
-          }
+
+          .tag-left, .tag-right { width: 90px; }
+
           .tag-center {
             flex: 1;
             flex-direction: column;
             text-align: center;
           }
+
           .tag-logo {
             height: 20px;
             width: auto;
             margin-bottom: 2px;
           }
+
           .tag-middle-text {
             font-size: 9px;
             text-transform: uppercase;
             letter-spacing: 0.12em;
             color: #4b5563;
           }
+
           .tag-id {
             font-size: 10px;
             font-weight: 600;
             color: #111827;
             margin-top: 2px;
           }
+
           .qr-img,
           .barcode-img {
             max-height: 70px;
@@ -1144,166 +1218,148 @@ function handlePrintCard() {
           }
         </style>
       </head>
+
       <body>
         <div class="page">
-
-          <!-- Everything ABOVE the tags -->
-          <div class="top-content">
-            <div class="card">
-              <div class="card-header">
-                <img src="${logoUrl}" class="logo" alt="EMZLoveLuxury" />
-                <div class="card-id">
-                  <div class="card-id-url">${safeItemUrl}</div>
-                  <div class="card-id-label">Item ID / SKU</div>
-                  <div class="card-id-value">${escapeHtml(safeItemNumber)}</div>
-                  <div class="card-id-brand">
-                    ${safeBrand}${safeModel ? " · " + safeModel : ""}
-                  </div>
-                </div>
-              </div>
-
-              <div class="card-body">
-                <!-- LEFT COLUMN: item info + features + market + pricing -->
-                <div>
-                  <div class="card-section-title">Item Information</div>
-                  <div class="meta-list">
-                    <div><span class="meta-label">Brand:</span> ${safeBrand || "—"}</div>
-                    <div><span class="meta-label">Model:</span> ${safeModel || "—"}</div>
-                    <div><span class="meta-label">Category:</span> ${safeCategory || "—"}</div>
-                    <div><span class="meta-label">Color:</span> ${safeColor || "—"}</div>
-                    <div><span class="meta-label">Material:</span> ${safeMaterial || "—"}</div>
-                    <div><span class="meta-label">Condition Grade:</span> ${safeCondition || "—"}</div>
-                    <div><span class="meta-label">Condition Notes:</span> ${safeNotes || "—"}</div>
-                    ${
-                      dimsParts.length > 0
-                        ? `<div style="margin-top:4px;"><span class="meta-label">Measurements:</span> ${escapeHtml(
-                            dimsParts.join(" · ")
-                          )}</div>`
-                        : ""
-                    }
-                  </div>
-
-                  ${
-                    hasFeatures
-                      ? `
-                  <div class="subsection-title">Key Features</div>
-                  <div class="subsection-body">
-                    <ul>
-                      ${featureBullets
-                        .map((f) => `<li>${escapeHtml(String(f))}</li>`)
-                        .join("")}
-                    </ul>
-                  </div>
-                  `
-                      : ""
-                  }
-
-                  ${
-                    hasMarketNote
-                      ? `
-                  <div class="subsection-title">Market Note</div>
-                  <div class="subsection-body">
-                    ${escapeHtml(marketNote)}
-                  </div>
-                  `
-                      : ""
-                  }
-
-                  ${
-                    hasPricingInsight
-                      ? `
-                  <div class="subsection-title">Pricing Insight</div>
-                  <div class="subsection-body">
-                    ${pricingLines
-                      .map((line) => escapeHtml(line))
-                      .join("<br />")}
-                  </div>
-                  `
-                      : ""
-                  }
-
-                  ${
-                    hasInclusions
-                      ? `
-                  <div class="subsection-title">Inclusions</div>
-                  <div class="subsection-body">
-                    ${compiledInclusions
-                      .map((inc) => `• ${escapeHtml(inc)}`)
-                      .join("<br />")}
-                  </div>
-                  `
-                      : ""
-                  }
-                </div>
-
-                <!-- RIGHT COLUMN: EMZCurator narrative only -->
-                <div>
-                  <div class="card-section-title">EMZCurator Description &amp; Comps</div>
-                  <div class="narrative-box">
-                    <pre>${
-                      safeNarrative ||
-                      "Run EMZCurator AI to generate a structured summary for this item."
-                    }</pre>
-                  </div>
-                </div>
+          <div class="card">
+            <div class="card-header">
+              <img src="${logoUrl}" class="logo" alt="EMZLoveLuxury" />
+              <div class="card-id">
+                <div class="card-id-url">${safeItemUrl}</div>
+                <div class="card-id-label">Item ID / SKU</div>
+                <div class="card-id-value">${escapeHtml(safeItemNumber)}</div>
+                <div class="card-id-brand">${safeBrand}${safeModel ? " · " + safeModel : ""}</div>
               </div>
             </div>
 
-            <div class="cutline">
-              CUT ALONG THIS LINE TO CREATE HANG TAGS
-              <div class="fold-note">(Two identical tags below: QR on the left, barcode on the right.)</div>
-            </div>
-          </div>
+            <div class="card-body">
+              <!-- LEFT COLUMN -->
+              <div>
+                <div class="card-section-title">Item Information</div>
+                <div class="meta-list">
+                  <div><span class="meta-label">Brand:</span> ${safeBrand || "—"}</div>
+                  <div><span class="meta-label">Model:</span> ${safeModel || "—"}</div>
+                  <div><span class="meta-label">Category:</span> ${safeCategory || "—"}</div>
+                  <div><span class="meta-label">Color:</span> ${safeColor || "—"}</div>
+                  <div><span class="meta-label">Material:</span> ${safeMaterial || "—"}</div>
+                  <div><span class="meta-label">Condition Grade:</span> ${safeCondition || "—"}</div>
+                  <div><span class="meta-label">Condition Notes:</span> ${safeNotes || "—"}</div>
+                  ${
+                    dimsParts.length > 0
+                      ? `<div style="margin-top:4px;"><span class="meta-label">Measurements:</span> ${escapeHtml(
+                          dimsParts.join(" · ")
+                        )}</div>`
+                      : ""
+                  }
+                </div>
 
-          <!-- TAGS LOCKED TO BOTTOM OF PAGE -->
-          <div class="tag-strip-container">
-            <div class="tag-strip">
-              <div class="tag-row">
-                <div class="tag-left">
-                  <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
-                </div>
-                <div class="tag-center">
-                  <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-                  <div class="tag-middle-text">EMZLoveLuxury Inventory</div>
-                  <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
-                </div>
-                <div class="tag-right">
-                  <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
-                </div>
+                ${
+                  hasFeatures
+                    ? `
+                      <div class="subsection-title">Key Features</div>
+                      <div class="subsection-body">
+                        <ul>
+                          ${featureBullets
+                            .map((f) => `<li>${escapeHtml(String(f))}</li>`)
+                            .join("")}
+                        </ul>
+                      </div>
+                    `
+                    : ""
+                }
+
+                ${
+                  hasMarketNote
+                    ? `
+                      <div class="subsection-title">Market Note</div>
+                      <div class="subsection-body">
+                        ${escapeHtml(marketNote)}
+                      </div>
+                    `
+                    : ""
+                }
+
+                ${
+                  hasPricingInsight
+                    ? `
+                      <div class="subsection-title">Pricing Insight</div>
+                      <div class="subsection-body">
+                        ${pricingLines.map((line) => escapeHtml(line)).join("<br />")}
+                      </div>
+                    `
+                    : ""
+                }
+
+                ${
+                  hasInclusions
+                    ? `
+                      <div class="subsection-title">Inclusions</div>
+                      <div class="subsection-body">
+                        ${compiledInclusions.map((i) => "• " + escapeHtml(i)).join("<br />")}
+                      </div>
+                    `
+                    : ""
+                }
               </div>
 
-              <div class="tag-row">
-                <div class="tag-left">
-                  <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
-                </div>
-                <div class="tag-center">
-                  <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
-                  <div class="tag-middle-text">EMZLoveLuxury Inventory</div>
-                  <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
-                </div>
-                <div class="tag-right">
-                  <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
+              <!-- RIGHT COLUMN: NARRATIVE -->
+              <div>
+                <div class="card-section-title">EMZCurator Description &amp; Comps</div>
+                <div class="narrative-box">
+                  ${
+                    safeNarrativeHtml ||
+                    "Run EMZCurator AI to generate a structured summary for this item."
+                  }
                 </div>
               </div>
             </div>
           </div>
 
+          <!-- CUT LINE -->
+          <div class="cutline">
+            CUT ALONG THIS LINE TO CREATE HANG TAGS
+            <div class="fold-note">(Two identical tags below: QR on the left, barcode on the right.)</div>
+          </div>
+
+          <!-- TAG STRIPS -->
+          <div class="tag-strip">
+            <div class="tag-row">
+              <div class="tag-left"><img src="${qrUrl}" class="qr-img" /></div>
+              <div class="tag-center">
+                <img src="${logoUrl}" class="tag-logo" />
+                <div class="tag-middle-text">EMZLoveLuxury Inventory</div>
+                <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
+              </div>
+              <div class="tag-right"><img src="${barcodeUrl}" class="barcode-img" /></div>
+            </div>
+
+            <div class="tag-row">
+              <div class="tag-left"><img src="${qrUrl}" class="qr-img" /></div>
+              <div class="tag-center">
+                <img src="${logoUrl}" class="tag-logo" />
+                <div class="tag-middle-text">EMZLoveLuxury Inventory</div>
+                <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
+              </div>
+              <div class="tag-right"><img src="${barcodeUrl}" class="barcode-img" /></div>
+            </div>
+          </div>
         </div>
       </body>
     </html>
   `;
 
-  const printWindow = window.open("", "_blank");
-  if (printWindow) {
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+  // Open print window
+  const win = window.open("", "_blank");
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
   } else {
     alert("Popup blocked. Please allow popups for this site to print.");
   }
+}
 
-  }
 
   const latestFive = userInventory.slice(0, 5);
 
