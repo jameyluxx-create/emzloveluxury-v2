@@ -400,6 +400,10 @@ function IntakePageInner() {
   // User — we will later wire this to real auth
   const currentUserId = "demo-user-123";
 
+  // NEW — for database tracking + locking the SKU
+  const [listingId, setListingId] = useState(null);
+  const [skuLocked, setSkuLocked] = useState(false);
+
   // e.g. "LV-PASSY-EMZ-001"
   const [itemNumber, setItemNumber] = useState("");
   const [brandCodeState, setBrandCodeState] = useState("");
@@ -562,7 +566,10 @@ function IntakePageInner() {
     }
   }
 
-  function updateItemNumber(brandC, modelC, seq) {
+    function updateItemNumber(brandC, modelC, seq) {
+    // Once a real SKU has been created, never auto-change it again
+    if (skuLocked) return;
+
     const bc = brandC || "BR-GEN";
     let mc = modelC || "GEN";
 
@@ -571,12 +578,15 @@ function IntakePageInner() {
     }
 
     if (!seq) {
+      // Preview-style ID before a true SKU exists
       setItemNumber(`${bc}-${mc}`);
       return;
     }
 
+    // Full SKU pattern once we have a sequence value
     setItemNumber(`${bc}-${mc}-EMZ-${seq}`);
   }
+
 
   function handleListingPhotoClick() {
     handleReplaceImage(0);
@@ -591,7 +601,7 @@ function IntakePageInner() {
     handleReplaceImage(nextSlot);
   }
 
-  function handleReplaceImage(slotIndex) {
+  async function handleReplaceImage(slotIndex) {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -601,6 +611,7 @@ function IntakePageInner() {
       if (!file) return;
 
       try {
+        // Resize on client first
         const resizedBlob = await resizeImage(file, 1200, 0.8);
         const ext = file.name.split(".").pop() || "jpg";
         const fileName = `${Date.now()}-${slotIndex}.${ext}`;
@@ -631,6 +642,96 @@ function IntakePageInner() {
           name: file.name,
         };
         setImages(next);
+
+        // ---------- NEW: tie hero photo to SKU + listing ----------
+        if (slotIndex === 0) {
+          try {
+            // If a listing already exists, just update its images
+            if (listingId) {
+              const { error: updateErr } = await supabase
+                .from("listings")
+                .update({ images: next })
+                .eq("id", listingId);
+
+              if (updateErr) {
+                console.error("Error updating listing images:", updateErr);
+              }
+            } else {
+              // First-ever hero photo -> generate SKU + create listing row
+              const brandC = brandCode(brand);
+              const modelC = modelCode(model);
+              const nextSeq = await fetchNextSequence(
+                supabase,
+                brandC,
+                modelC
+              );
+
+              const newItemNumber = `${brandC}-${modelC}-EMZ-${nextSeq}`;
+
+              setBrandCodeState(brandC);
+              setModelCodeState(modelC);
+              setSequenceNum(nextSeq);
+              setItemNumber(newItemNumber);
+              setSkuLocked(true); // From now on, don’t auto-change SKU
+
+              const imagesPayload = next.filter((img) => img !== null);
+
+              const { data, error: insertErr } = await supabase
+                .from("listings")
+                .insert({
+                  user_id: currentUserId,
+                  item_number: newItemNumber,
+                  brand: brand || null,
+                  model: model || null,
+                  category: category || null,
+                  color: color || null,
+                  material: material || null,
+                  description: curatorNarrative || null,
+                  condition: condition || null,
+                  condition_notes: gradingNotes || null,
+                  currency,
+                  cost: cost ? Number(cost) : null,
+                  listing_price: listingPrice ? Number(listingPrice) : null,
+                  images: imagesPayload,
+                  status: "intake",
+                  is_public: false,
+                })
+                .select()
+                .single();
+
+              if (insertErr) {
+                console.error(
+                  "Error creating new listing from main photo:",
+                  insertErr
+                );
+              } else if (data) {
+                setListingId(data.id);
+              }
+            }
+          } catch (err2) {
+            console.error("Error handling main photo SKU/listing:", err2);
+          }
+        } else if (listingId) {
+          // Additional photos -> keep listing in sync
+          try {
+            const { error: updateErr } = await supabase
+              .from("listings")
+              .update({ images: next })
+              .eq("id", listingId);
+
+            if (updateErr) {
+              console.error(
+                "Error updating listing images with additional photo:",
+                updateErr
+              );
+            }
+          } catch (err3) {
+            console.error(
+              "Error updating listing with additional photo:",
+              err3
+            );
+          }
+        }
       } catch (err) {
         console.error(err);
         alert("Could not process image.");
@@ -639,6 +740,7 @@ function IntakePageInner() {
 
     input.click();
   }
+
 
   function handleIncludedToggle(key) {
     setIncludedItems((prev) => ({
@@ -897,7 +999,7 @@ function IntakePageInner() {
   }
 }
 
-  async function handleSave() {
+   async function handleSave() {
     setIsSaving(true);
     setErrorMsg("");
     setSuccessMsg("");
@@ -919,19 +1021,39 @@ function IntakePageInner() {
       }
     }
 
+    // HARD RULE: new items must have a main photo
+    const hero = images[0];
+    if (!listingId && (!hero || !hero.url)) {
+      setErrorMsg(
+        "Add a listing photo (main image) or load an existing SKU before saving this item."
+      );
+      setIsSaving(false);
+      return;
+    }
+
     try {
-      const brandC = brandCode(brand);
-      const modelC = modelCode(model);
-      const nextSequence = await fetchNextSequence(supabase, brandC, modelC);
+      // If somehow we have a photo but no SKU yet, generate it as a fallback
+      let finalItemNumber = itemNumber;
+      if (!finalItemNumber) {
+        const brandC = brandCode(brand);
+        const modelC = modelCode(model);
+        const nextSequence = await fetchNextSequence(
+          supabase,
+          brandC,
+          modelC
+        );
 
-      setBrandCodeState(brandC);
-      setModelCodeState(modelC);
-      setSequenceNum(nextSequence);
+        setBrandCodeState(brandC);
+        setModelCodeState(modelC);
+        setSequenceNum(nextSequence);
 
-      const finalItemNumber = `${brandC}-${modelC}-EMZ-${nextSequence}`;
-      setItemNumber(finalItemNumber);
+        finalItemNumber = `${brandC}-${modelC}-EMZ-${nextSequence}`;
+        setItemNumber(finalItemNumber);
+        setSkuLocked(true);
+      }
 
       const imagesPayload = images.filter((img) => img !== null);
+
       const aiIdentity = aiData?.identity || {};
       const identity = {
         ...aiIdentity,
@@ -941,6 +1063,7 @@ function IntakePageInner() {
         color: color || aiIdentity.color || null,
         material: material || aiIdentity.material || null,
       };
+
       const pricing = aiData?.pricing || null;
       const seo = aiData?.seo
         ? { ...aiData.seo, user_override: false }
@@ -968,9 +1091,7 @@ function IntakePageInner() {
         includedItems: compiledIncluded,
       });
 
-      const payload = {
-        user_id: currentUserId,
-        item_number: finalItemNumber,
+      const payloadCommon = {
         brand: identity.brand,
         model: identity.model,
         category: identity.category_primary,
@@ -991,35 +1112,38 @@ function IntakePageInner() {
         search_keywords,
         status: listForSale ? "ready_to_sell" : "intake",
         is_public: listForSale,
+        item_number: finalItemNumber,
       };
 
-      // 1) Save/Upsert into inventory_items (SEO + QR slug)
-      await saveInventoryItem({
-        itemNumber: finalItemNumber,
-        brand: identity.brand,
-        model: identity.model,
-        category: identity.category_primary,
-        color: identity.color,
-        material: identity.material,
-        conditionGrade: condition,
-        gradingNotes,
-        dimensions,
-        aiData,
-        images: imagesPayload,
-        pricingPreview,
-        listingPrice,
-        currency,
-      });
+      let dbError = null;
 
-      // 2) Save into listings table (existing behavior)
-      const { data, error } = await supabase
-        .from("listings")
-        .insert(payload)
-        .select()
-        .single();
+      if (listingId) {
+        // UPDATE existing listing
+        const { error } = await supabase
+          .from("listings")
+          .update(payloadCommon)
+          .eq("id", listingId);
 
-      if (error) {
-        console.error(error);
+        dbError = error || null;
+      } else {
+        // FALLBACK CREATE (photo exists, SKU now generated above)
+        const { data, error } = await supabase
+          .from("listings")
+          .insert({
+            user_id: currentUserId,
+            ...payloadCommon,
+          })
+          .select()
+          .single();
+
+        dbError = error || null;
+        if (!error && data) {
+          setListingId(data.id);
+        }
+      }
+
+      if (dbError) {
+        console.error(dbError);
         setErrorMsg("Could not save item.");
         setIsSaving(false);
         return;
