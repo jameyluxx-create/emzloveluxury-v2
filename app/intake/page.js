@@ -1932,7 +1932,6 @@ function handlePrintCard() {
   <option value="U">U – Contemporary Brand</option>
 </select>
 
-          </select>
           <p
             style={{
               fontSize: "10px",
