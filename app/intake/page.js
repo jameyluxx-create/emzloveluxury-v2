@@ -889,7 +889,8 @@ function IntakePageInner() {
       setIsSaving(false);
     }
   }
-function handlePrintCard() {
+
+  function handlePrintCard() {
   const safeItemNumber = itemNumber || "(not assigned yet)";
 
   const origin =
@@ -900,12 +901,12 @@ function handlePrintCard() {
   const itemPathId =
     itemNumber && itemNumber !== "(not assigned yet)" ? itemNumber : "pending";
 
-  // Public item detail URL
+  // Future: this should match the public item detail route
   const itemUrl = `${origin}/item/${encodeURIComponent(itemPathId)}`;
 
   const logoUrl = `${origin}/emz-loveluxury-logo-horizontal.png`;
 
-  // QR + barcode
+  // QR + barcode values
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
     itemUrl
   )}&size=200x200&margin=0`;
@@ -914,16 +915,17 @@ function handlePrintCard() {
     itemPathId
   )}&scale=2&includetext&background=ffffff`;
 
-  // Measurements
+  // Measurements line
   const dimsParts = [];
   if (dimensions.length) dimsParts.push(`L: ${dimensions.length}`);
   if (dimensions.height) dimsParts.push(`H: ${dimensions.height}`);
   if (dimensions.depth) dimsParts.push(`D: ${dimensions.depth}`);
   if (dimensions.strap_drop) dimsParts.push(`Strap Drop: ${dimensions.strap_drop}`);
 
-  // AI data
+  // Feature bullets & Market Note & Pricing Insight from AI data
   const featureBullets =
-    aiData?.description?.feature_bullets && Array.isArray(aiData.description.feature_bullets)
+    aiData?.description?.feature_bullets &&
+    Array.isArray(aiData.description.feature_bullets)
       ? aiData.description.feature_bullets
       : [];
 
@@ -934,7 +936,9 @@ function handlePrintCard() {
 
   const pricingLines = [];
   if (pricingPreview.retail_price) {
-    pricingLines.push(`Retail (approx., often USD): ${pricingPreview.retail_price}`);
+    pricingLines.push(
+      `Retail (approx., often USD): ${pricingPreview.retail_price}`
+    );
   }
   if (pricingPreview.comp_low || pricingPreview.comp_high) {
     const low = pricingPreview.comp_low || "";
@@ -948,10 +952,13 @@ function handlePrintCard() {
     }
   }
   if (pricingPreview.recommended_listing) {
-    pricingLines.push(`Internal anchor listing estimate: ${pricingPreview.recommended_listing}`);
+    pricingLines.push(
+      `Internal anchor listing estimate: ${pricingPreview.recommended_listing}`
+    );
   }
+  // NOTE: We intentionally do NOT include pricingPreview.whatnot_start on the card.
 
-  // Inclusions
+  // Inclusions (bottom of left column)
   const freeformLines = (includedFreeform || "")
     .split("\n")
     .map((x) => x.trim())
@@ -976,34 +983,13 @@ function handlePrintCard() {
   const safeCondition = escapeHtml(condition || "");
   const safeNotes = escapeHtml(gradingNotes || "");
   const safeItemUrl = escapeHtml(itemUrl);
-
-  // Convert narrative into styled HTML blocks
-  function convertNarrativeToHtml(narrativeText) {
-    if (!narrativeText) return "";
-
-    const sections = narrativeText.split(/\n\n\n+/); // separated by 3 newlines
-
-    return sections
-      .map((block) => {
-        const [headerLine, ...bodyLines] = block.split("\n");
-        return `
-          <div class="narrative-section">
-            <div class="narrative-heading">${escapeHtml(headerLine)}</div>
-            <div class="narrative-body">${escapeHtml(bodyLines.join("\n"))}</div>
-          </div>
-        `;
-      })
-      .join("");
-  }
-
-  const safeNarrativeHtml = convertNarrativeToHtml(curatorNarrative);
+  const safeNarrative = escapeHtml(curatorNarrative || "").trim();
 
   const hasPricingInsight = pricingLines.length > 0;
   const hasMarketNote = !!marketNote;
   const hasFeatures = featureBullets.length > 0;
   const hasInclusions = compiledInclusions.length > 0;
 
-  // Full HTML print doc
   const html = `
     <html>
       <head>
@@ -1013,21 +999,20 @@ function handlePrintCard() {
             size: Letter;
             margin: 0.5in;
           }
-
-          * { box-sizing: border-box; }
+          * {
+            box-sizing: border-box;
+          }
           body {
             margin: 0;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
             background: #f3f4f6;
             color: #111827;
           }
-
           .page {
             width: 100%;
             max-width: 8.5in;
             margin: 0 auto;
           }
-
           .card {
             border-radius: 16px;
             border: 1px solid #d4af37;
@@ -1035,7 +1020,6 @@ function handlePrintCard() {
             padding: 16px 18px;
             box-shadow: 0 8px 20px rgba(0,0,0,0.08);
           }
-
           .card-header {
             display: flex;
             align-items: center;
@@ -1043,39 +1027,33 @@ function handlePrintCard() {
             gap: 16px;
             margin-bottom: 8px;
           }
-
           .logo {
             height: 40px;
             width: auto;
           }
-
           .card-id {
             text-align: right;
             font-size: 11px;
             color: #4b5563;
             max-width: 260px;
           }
-
           .card-id-url {
             font-size: 10px;
             color: #6b7280;
             margin-bottom: 3px;
             word-break: break-all;
           }
-
           .card-id-label {
             font-size: 10px;
             text-transform: uppercase;
             letter-spacing: 0.16em;
             color: #6b7280;
           }
-
           .card-id-value {
             font-size: 14px;
             font-weight: 600;
             color: #111827;
           }
-
           .card-id-brand {
             font-size: 11px;
             color: #4b5563;
@@ -1100,9 +1078,12 @@ function handlePrintCard() {
             font-size: 11px;
             line-height: 1.45;
           }
-
-          .meta-list div { margin-bottom: 2px; }
-          .meta-label { font-weight: 600; }
+          .meta-list div {
+            margin-bottom: 2px;
+          }
+          .meta-label {
+            font-weight: 600;
+          }
 
           .subsection-title {
             margin-top: 8px;
@@ -1112,68 +1093,63 @@ function handlePrintCard() {
             letter-spacing: 0.12em;
             color: #6b7280;
           }
-
           .subsection-body {
             font-size: 11px;
             line-height: 1.45;
             margin-top: 2px;
           }
-
-          .subsection-body ul { margin: 2px 0 0 16px; padding: 0; }
-          .subsection-body li { margin-bottom: 1px; }
-
-          /* Narrative styling */
-          .narrative-section { margin-bottom: 12px; }
-
-          .narrative-heading {
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 3px;
-            color: #374151;
+          .subsection-body ul {
+            margin: 2px 0 0 16px;
+            padding: 0;
+          }
+          .subsection-body li {
+            margin-bottom: 1px;
           }
 
-          .narrative-body {
+          .narrative-box {
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            padding: 8px;
+            font-size: 11px;
+            min-height: 120px;
+          }
+          .narrative-box pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: inherit;
             font-size: 11px;
             line-height: 1.45;
-            white-space: pre-wrap;
           }
 
-          /* Cut + Tags */
+          /* Tag block at bottom (no text, just dashed divider + tags) */
+          .tag-block {
+            margin-top: 14px;
+          }
           .cutline {
-            margin-top: 18px;
             border-top: 1px dashed #9ca3af;
-            text-align: center;
-            font-size: 10px;
-            color: #6b7280;
-            padding-top: 4px;
+            height: 0;
+            margin: 0;
+            padding: 0;
           }
 
-          .fold-note {
-            font-size: 9px;
-            color: #6b7280;
-            text-align: center;
-            margin-top: 2px;
-          }
-
-          .tag-strip {
-            margin-top: 8px;
+          .tags-wrapper {
+            margin-top: 6px;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
           }
-
           .tag-row {
-            border-radius: 10px;
+            border-radius: 12px;
             border: 1px solid #111827;
             background: #ffffff;
-            padding: 6px 8px;
+            padding: 4px 8px;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            min-height: 0.9in;
           }
-
           .tag-left,
           .tag-center,
           .tag-right {
@@ -1181,44 +1157,40 @@ function handlePrintCard() {
             align-items: center;
             justify-content: center;
           }
-
-          .tag-left, .tag-right { width: 90px; }
-
+          .tag-left,
+          .tag-right {
+            width: 90px;
+          }
           .tag-center {
             flex: 1;
             flex-direction: column;
             text-align: center;
           }
-
           .tag-logo {
             height: 20px;
             width: auto;
             margin-bottom: 2px;
           }
-
           .tag-middle-text {
             font-size: 9px;
             text-transform: uppercase;
             letter-spacing: 0.12em;
             color: #4b5563;
           }
-
           .tag-id {
             font-size: 10px;
             font-weight: 600;
             color: #111827;
             margin-top: 2px;
           }
-
           .qr-img,
           .barcode-img {
-            max-height: 70px;
+            max-height: 60px;
             max-width: 100%;
             display: block;
           }
         </style>
       </head>
-
       <body>
         <div class="page">
           <div class="card">
@@ -1226,16 +1198,18 @@ function handlePrintCard() {
               <img src="${logoUrl}" class="logo" alt="EMZLoveLuxury" />
               <div class="card-id">
                 <div class="card-id-url">${safeItemUrl}</div>
-                <div class="card-id-label">Item ID / SKU</div>
+                <div class="card-id-label">ITEM ID / SKU</div>
                 <div class="card-id-value">${escapeHtml(safeItemNumber)}</div>
-                <div class="card-id-brand">${safeBrand}${safeModel ? " · " + safeModel : ""}</div>
+                <div class="card-id-brand">
+                  ${safeBrand}${safeModel ? " · " + safeModel : ""}
+                </div>
               </div>
             </div>
 
             <div class="card-body">
-              <!-- LEFT COLUMN -->
+              <!-- LEFT COLUMN: item info + features + market + pricing + inclusions -->
               <div>
-                <div class="card-section-title">Item Information</div>
+                <div class="card-section-title">ITEM INFORMATION</div>
                 <div class="meta-list">
                   <div><span class="meta-label">Brand:</span> ${safeBrand || "—"}</div>
                   <div><span class="meta-label">Model:</span> ${safeModel || "—"}</div>
@@ -1256,91 +1230,101 @@ function handlePrintCard() {
                 ${
                   hasFeatures
                     ? `
-                      <div class="subsection-title">Key Features</div>
-                      <div class="subsection-body">
-                        <ul>
-                          ${featureBullets
-                            .map((f) => `<li>${escapeHtml(String(f))}</li>`)
-                            .join("")}
-                        </ul>
-                      </div>
-                    `
+                <div class="subsection-title">KEY FEATURES</div>
+                <div class="subsection-body">
+                  <ul>
+                    ${featureBullets
+                      .map((f) => `<li>${escapeHtml(String(f))}</li>`)
+                      .join("")}
+                  </ul>
+                </div>
+                `
                     : ""
                 }
 
                 ${
                   hasMarketNote
                     ? `
-                      <div class="subsection-title">Market Note</div>
-                      <div class="subsection-body">
-                        ${escapeHtml(marketNote)}
-                      </div>
-                    `
+                <div class="subsection-title">MARKET NOTE</div>
+                <div class="subsection-body">
+                  ${escapeHtml(marketNote)}
+                </div>
+                `
                     : ""
                 }
 
                 ${
                   hasPricingInsight
                     ? `
-                      <div class="subsection-title">Pricing Insight</div>
-                      <div class="subsection-body">
-                        ${pricingLines.map((line) => escapeHtml(line)).join("<br />")}
-                      </div>
-                    `
+                <div class="subsection-title">PRICING INSIGHT</div>
+                <div class="subsection-body">
+                  ${pricingLines
+                    .map((line) => escapeHtml(line))
+                    .join("<br />")}
+                </div>
+                `
                     : ""
                 }
 
                 ${
                   hasInclusions
                     ? `
-                      <div class="subsection-title">Inclusions</div>
-                      <div class="subsection-body">
-                        ${compiledInclusions.map((i) => "• " + escapeHtml(i)).join("<br />")}
-                      </div>
-                    `
+                <div class="subsection-title">INCLUSIONS</div>
+                <div class="subsection-body">
+                  ${compiledInclusions
+                    .map((inc) => "• " + escapeHtml(inc))
+                    .join("<br />")}
+                </div>
+                `
                     : ""
                 }
               </div>
 
-              <!-- RIGHT COLUMN: NARRATIVE -->
+              <!-- RIGHT COLUMN: EMZCurator narrative only -->
               <div>
-                <div class="card-section-title">EMZCurator Description &amp; Comps</div>
+                <div class="card-section-title">EMZCURATOR DESCRIPTION &amp; COMPS</div>
                 <div class="narrative-box">
-                  ${
-                    safeNarrativeHtml ||
+                  <pre>${
+                    safeNarrative ||
                     "Run EMZCurator AI to generate a structured summary for this item."
-                  }
+                  }</pre>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- CUT LINE -->
-          <div class="cutline">
-            CUT ALONG THIS LINE TO CREATE HANG TAGS
-            <div class="fold-note">(Two identical tags below: QR on the left, barcode on the right.)</div>
-          </div>
+          <!-- TAGS BLOCK (no text, just dashed divider + two tags) -->
+          <div class="tag-block">
+            <div class="cutline"></div>
 
-          <!-- TAG STRIPS -->
-          <div class="tag-strip">
-            <div class="tag-row">
-              <div class="tag-left"><img src="${qrUrl}" class="qr-img" /></div>
-              <div class="tag-center">
-                <img src="${logoUrl}" class="tag-logo" />
-                <div class="tag-middle-text">EMZLoveLuxury Inventory</div>
-                <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
+            <div class="tags-wrapper">
+              <div class="tag-row">
+                <div class="tag-left">
+                  <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
+                </div>
+                <div class="tag-center">
+                  <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                  <div class="tag-middle-text">EMZLOVELUXURY INVENTORY</div>
+                  <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
+                </div>
+                <div class="tag-right">
+                  <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
+                </div>
               </div>
-              <div class="tag-right"><img src="${barcodeUrl}" class="barcode-img" /></div>
-            </div>
 
-            <div class="tag-row">
-              <div class="tag-left"><img src="${qrUrl}" class="qr-img" /></div>
-              <div class="tag-center">
-                <img src="${logoUrl}" class="tag-logo" />
-                <div class="tag-middle-text">EMZLoveLuxury Inventory</div>
-                <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
+              <div class="tag-row">
+                <div class="tag-left">
+                  <img src="${qrUrl}" class="qr-img" alt="QR code to item listing" />
+                </div>
+                <div class="tag-center">
+                  <img src="${logoUrl}" class="tag-logo" alt="EMZLoveLuxury logo" />
+                  <div class="tag-middle-text">EMZLOVELUXURY INVENTORY</div>
+                  <div class="tag-id">Item #: ${escapeHtml(safeItemNumber)}</div>
+                </div>
+                <div class="tag-right">
+                  <img src="${barcodeUrl}" class="barcode-img" alt="Barcode item number" />
+                </div>
               </div>
-              <div class="tag-right"><img src="${barcodeUrl}" class="barcode-img" /></div>
             </div>
           </div>
         </div>
@@ -1348,13 +1332,12 @@ function handlePrintCard() {
     </html>
   `;
 
-  // Open print window
-  const win = window.open("", "_blank");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    win.print();
+  const printWindow = window.open("", "_blank");
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
   } else {
     alert("Popup blocked. Please allow popups for this site to print.");
   }
