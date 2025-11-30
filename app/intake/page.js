@@ -1,70 +1,73 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-// If you have shadcn toast:
-import { useToast } from "@/components/ui/use-toast";
 
-function toSlug(value) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)+/g, "");
+import { toast } from "sonner";
+import { intakeSchema } from "@/lib/validation/intake";
+
+async function safeFetch(url, options) {
+  try {
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Request failed");
+    }
+    const data = await res.json();
+    if (data?.error) throw new Error(data.error);
+    return data;
+  } catch (err) {
+    throw new Error(err.message || "Network error");
+  }
 }
 
 export default function IntakePage() {
   const router = useRouter();
-  const { toast } = useToast ? useToast() : { toast: () => {} };
-  const [isPending, startTransition] = useTransition();
 
-  // Core item fields
+  const [baseSlug, setBaseSlug] = useState("");
+  const [fullSlug, setFullSlug] = useState("");
+
   const [itemNumber, setItemNumber] = useState("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
-  const [submodel, setSubmodel] = useState("");
-  const [variant, setVariant] = useState("");
-  const [category, setCategory] = useState("");
-  const [color, setColor] = useState("");
-  const [material, setMaterial] = useState("");
-  const [size, setSize] = useState("");
-  const [conditionGrade, setConditionGrade] = useState("");
-  const [acquisitionSource, setAcquisitionSource] = useState("");
-  const [acquisitionCost, setAcquisitionCost] = useState("");
-  const [listPrice, setListPrice] = useState("");
-  const [itemTitle, setItemTitle] = useState("");
+  const [status, setStatus] = useState("intake");
+  const [grade, setGrade] = useState("B");
 
-  // Slugs & system
-  const [slug, setSlug] = useState("");
-  const [fullSlug, setFullSlug] = useState("");
+  const [identity, setIdentity] = useState({
+    brand: "",
+    model: "",
+    submodel: "",
+    variant: "",
+    material: "",
+    color: "",
+    pattern: "",
+    hardware: "",
+    gender: "",
+    size: "",
+    era: "",
+    origin: "",
+    notes: "",
+  });
 
-  // AI / SEO / Identity
-  const [aiQuickFacts, setAiQuickFacts] = useState("");
-  const [seoRaw, setSeoRaw] = useState('{\n  "title": "",\n  "description": "",\n  "h1": "",\n  "meta": {}\n}');
-  const [identityRaw, setIdentityRaw] = useState(
-    '{\n  "brand": "",\n  "model": "",\n  "submodel": "",\n  "variant": "",\n  "category": "",\n  "color": "",\n  "material": "",\n  "size": "",\n  "era": "",\n  "origin": "",\n  "notes": ""\n}'
-  );
-  const [searchKeywordsRaw, setSearchKeywordsRaw] = useState("");
+  const [seo, setSeo] = useState({
+    title: "",
+    subtitle: "",
+    bullets: [],
+    description: "",
+  });
 
-  // Misc
+  const [searchKeywords, setSearchKeywords] = useState([]);
+
   const [notes, setNotes] = useState("");
   const [imagePlaceholderUrl, setImagePlaceholderUrl] = useState("");
 
@@ -72,143 +75,72 @@ export default function IntakePage() {
   const [isCallingAi, setIsCallingAi] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Helpers
-  function getBaseSlug() {
-    if (itemTitle) return toSlug(itemTitle);
-    if (brand || model) return toSlug(`${brand} ${model} ${submodel}`.trim());
-    return "";
+  function computeSlug(str) {
+    return str
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .trim();
   }
 
-  function showToast(opts) {
-    if (!toast) return;
-    toast(opts);
+  function updateBaseSlug() {
+    const raw = `${brand} ${model}`.trim();
+    setBaseSlug(raw ? computeSlug(raw) : "");
   }
+
+  function updateFullSlug() {
+    if (!baseSlug || !itemNumber) return;
+    setFullSlug(`${baseSlug}-${itemNumber}`);
+  }
+
+  useEffect(() => {
+    updateBaseSlug();
+  }, [brand, model]);
+
+  useEffect(() => {
+    updateFullSlug();
+  }, [baseSlug, itemNumber]);
 
   async function handleGenerateSku() {
     try {
       setIsGeneratingSku(true);
-
-      const res = await fetch("/api/intake/generate-sku", {
+      const result = await safeFetch("/api/intake/generate-sku", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          item_number: itemNumber || null,
-          brand,
-          category,
-          model,
-          submodel,
-          variant,
-        }),
+        body: JSON.stringify({ brand, model }),
       });
-
-      if (!res.ok) {
-        throw new Error(`Generate SKU failed: ${res.status}`);
-      }
-
-      const data = await res.json();
-      // Expecting something like:
-      // { item_number, slug, full_slug }
-      if (data.item_number) setItemNumber(data.item_number);
-      if (data.slug) setSlug(data.slug);
-      if (data.full_slug) setFullSlug(data.full_slug);
-
-      showToast({
-        title: "SKU generated",
-        description: "Item number and slugs updated.",
-      });
+      if (!result?.itemNumber) throw new Error("Invalid SKU response");
+      setItemNumber(result.itemNumber);
+      toast.success("SKU generated");
     } catch (err) {
-      console.error(err);
-      showToast({
-        title: "Error generating SKU",
-        description: err.message ?? "Check console for details.",
-        variant: "destructive",
-      });
+      toast.error(err.message);
     } finally {
       setIsGeneratingSku(false);
     }
   }
 
-  async function handleAiCurate() {
+  async function handleAi() {
     try {
       setIsCallingAi(true);
-
-      // Try to parse existing identity/seo if they’re valid JSON
-      let existingIdentity = null;
-      let existingSeo = null;
-      try {
-        existingIdentity = JSON.parse(identityRaw);
-      } catch {
-        existingIdentity = null;
-      }
-      try {
-        existingSeo = JSON.parse(seoRaw);
-      } catch {
-        existingSeo = null;
-      }
-
-      const res = await fetch("/api/intake/ai", {
+      const payload = {
+        brand,
+        model,
+        identity,
+        notes,
+        seo,
+        searchKeywords,
+      };
+      const result = await safeFetch("/api/intake/ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          brand,
-          model,
-          submodel,
-          variant,
-          category,
-          color,
-          material,
-          size,
-          condition_grade: conditionGrade,
-          notes,
-          existingIdentity,
-          existingSeo,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        throw new Error(`AI curator failed: ${res.status}`);
-      }
+      if (result.identity) setIdentity((prev) => ({ ...prev, ...result.identity }));
+      if (result.seo) setSeo((prev) => ({ ...prev, ...result.seo }));
+      if (result.searchKeywords) setSearchKeywords(result.searchKeywords);
 
-      // Expected response shape (adjust to match your route implementation)
-      // {
-      //   identity: {...},
-      //   seo: {...},
-      //   search_keywords: ["lv", "monogram", ...],
-      //   quick_facts: "…",
-      //   title?: "Optional AI title"
-      // }
-      const data = await res.json();
-
-      if (data.identity) {
-        setIdentityRaw(JSON.stringify(data.identity, null, 2));
-      }
-      if (data.seo) {
-        setSeoRaw(JSON.stringify(data.seo, null, 2));
-        if (!itemTitle && data.seo.title) {
-          setItemTitle(data.seo.title);
-          const baseSlug = toSlug(data.seo.title);
-          if (!slug) setSlug(baseSlug);
-          if (!fullSlug) setFullSlug(baseSlug);
-        }
-      }
-      if (data.search_keywords) {
-        setSearchKeywordsRaw(data.search_keywords.join(", "));
-      }
-      if (data.quick_facts) {
-        setAiQuickFacts(data.quick_facts);
-      }
-
-      showToast({
-        title: "AI Curator complete",
-        description: "Identity, SEO, and keywords updated.",
-      });
+      toast.success("AI data generated");
     } catch (err) {
-      console.error(err);
-      showToast({
-        title: "AI Curator error",
-        description: err.message ?? "Check console for details.",
-        variant: "destructive",
-      });
+      toast.error(err.message);
     } finally {
       setIsCallingAi(false);
     }
@@ -218,474 +150,353 @@ export default function IntakePage() {
     e.preventDefault();
     try {
       setIsSaving(true);
-
-      // Parse identity
-      let identity;
-      try {
-        identity = JSON.parse(identityRaw || "{}");
-      } catch (err) {
-        showToast({
-          title: "Invalid Identity JSON",
-          description: "Please fix the identity block before saving.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Parse SEO
-      let seo;
-      try {
-        seo = JSON.parse(seoRaw || "{}");
-      } catch (err) {
-        showToast({
-          title: "Invalid SEO JSON",
-          description: "Please fix the SEO block before saving.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Parse search keywords
-      const searchKeywords = (searchKeywordsRaw || "")
-        .split(/[\n,]/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-
       const payload = {
-        item_number: itemNumber || null,
+        itemNumber,
+        slug: baseSlug,
+        full_slug: fullSlug,
         brand,
         model,
-        submodel,
-        variant,
-        category,
-        color,
-        material,
-        size,
-        condition_grade: conditionGrade,
-        acquisition_source: acquisitionSource,
-        acquisition_cost: acquisitionCost ? Number(acquisitionCost) : null,
-        list_price: listPrice ? Number(listPrice) : null,
-        item_title: itemTitle,
-        slug: slug || getBaseSlug(),
-        full_slug: fullSlug || getBaseSlug(),
+        status,
+        grade,
         identity,
         seo,
         search_keywords: searchKeywords,
-        ai_quick_facts: aiQuickFacts,
         notes,
-        image_placeholder_url: imagePlaceholderUrl || null,
+        imagePlaceholderUrl,
       };
 
-      const res = await fetch("/api/intake/save", {
+      const parsed = intakeSchema.parse(payload);
+
+      const result = await safeFetch("/api/intake/save", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(parsed),
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Save failed: ${res.status}`);
-      }
-
-      const data = await res.json();
-      // Expect: { full_slug, id, ... } from API
-      const finalFullSlug = data.full_slug || payload.full_slug;
-
-      showToast({
-        title: "Item saved",
-        description: finalFullSlug
-          ? `Saved as ${finalFullSlug}`
-          : "Item saved successfully.",
-      });
-
-      if (finalFullSlug) {
-        startTransition(() => {
-          router.push(`/item/${finalFullSlug}`);
-        });
-      }
+      if (!result?.full_slug) throw new Error("Invalid save response");
+      toast.success("Saved");
+      router.push(`/item/${result.full_slug}`);
     } catch (err) {
-      console.error(err);
-      showToast({
-        title: "Save error",
-        description: err.message ?? "Check console for details.",
-        variant: "destructive",
-      });
+      toast.error(err.message);
     } finally {
       setIsSaving(false);
     }
   }
 
-  function handleAutoSlugFromTitle() {
-    const base = getBaseSlug();
-    if (!base) return;
-    if (!slug) setSlug(base);
-    if (!fullSlug) setFullSlug(base);
-    showToast({
-      title: "Slugs updated",
-      description: base,
-    });
-  }
-
-  const disabled = isPending || isSaving;
-
   return (
-    <div className="px-4 py-6 md:px-8 lg:px-12 space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Intake &amp; AI Curator
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Step 1 of 6 — create or update an item, then let AI help with
-            identity, SEO, and print-ready data.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleAutoSlugFromTitle}
-          >
-            Auto-slug from title
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleGenerateSku}
-            disabled={isGeneratingSku}
-          >
-            {isGeneratingSku ? "Generating…" : "Generate SKU"}
-          </Button>
-        </div>
-      </div>
+    <div className="container mx-auto py-10 max-w-4xl">
+      <h1 className="text-3xl font-bold mb-6">Intake</h1>
 
-      <Separator />
+      <form onSubmit={handleSave} className="space-y-8">
 
-      <form
-        onSubmit={handleSave}
-        className="grid gap-4 md:gap-6 lg:gap-8 md:grid-cols-3"
-      >
-        {/* LEFT: Core item details */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Core Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="itemNumber">Item Number (SKU)</Label>
-                  <Input
-                    id="itemNumber"
-                    value={itemNumber}
-                    onChange={(e) => setItemNumber(e.target.value)}
-                    placeholder="Auto or manual"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="category">Category</Label>
-                  <Select
-                    value={category}
-                    onValueChange={(val) => setCategory(val)}
-                  >
-                    <SelectTrigger id="category">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="bag">Bag</SelectItem>
-                      <SelectItem value="wallet">Wallet</SelectItem>
-                      <SelectItem value="slg">SLG / Accessory</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Item Basics</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="text-sm font-medium">Brand</label>
+              <Input
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+                placeholder="e.g. Louis Vuitton"
+                required
+              />
+            </div>
 
-              <div>
-                <Label htmlFor="brand">Brand</Label>
-                <Input
-                  id="brand"
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  placeholder="Louis Vuitton, Gucci, Coach…"
-                />
-              </div>
+            <div>
+              <label className="text-sm font-medium">Model</label>
+              <Input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="e.g. Neverfull MM"
+                required
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="model">Model / Line</Label>
-                  <Input
-                    id="model"
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    placeholder="Neverfull, Zippy, etc."
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="submodel">Submodel</Label>
-                  <Input
-                    id="submodel"
-                    value={submodel}
-                    onChange={(e) => setSubmodel(e.target.value)}
-                    placeholder="MM, PM, etc."
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="variant">Variant</Label>
-                  <Input
-                    id="variant"
-                    value={variant}
-                    onChange={(e) => setVariant(e.target.value)}
-                    placeholder="Monogram, Damier, etc."
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="color">Color</Label>
-                  <Input
-                    id="color"
-                    value={color}
-                    onChange={(e) => setColor(e.target.value)}
-                    placeholder="Brown / Gold, Black, etc."
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="material">Material</Label>
-                  <Input
-                    id="material"
-                    value={material}
-                    onChange={(e) => setMaterial(e.target.value)}
-                    placeholder="Coated canvas, leather…"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="size">Size / Dimensions</Label>
-                  <Input
-                    id="size"
-                    value={size}
-                    onChange={(e) => setSize(e.target.value)}
-                    placeholder="Approx. size"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Condition Grade</Label>
-                  <Select
-                    value={conditionGrade}
-                    onValueChange={(val) => setConditionGrade(val)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select grade" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="A">A</SelectItem>
-                      <SelectItem value="B">B</SelectItem>
-                      <SelectItem value="C">C</SelectItem>
-                      <SelectItem value="D">D</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="acquisitionSource">Source</Label>
-                  <Input
-                    id="acquisitionSource"
-                    value={acquisitionSource}
-                    onChange={(e) => setAcquisitionSource(e.target.value)}
-                    placeholder="Buyee, 2nd Street, etc."
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="acquisitionCost">Cost (landed)</Label>
-                  <Input
-                    id="acquisitionCost"
-                    type="number"
-                    step="0.01"
-                    value={acquisitionCost}
-                    onChange={(e) => setAcquisitionCost(e.target.value)}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="listPrice">Target List Price</Label>
-                  <Input
-                    id="listPrice"
-                    type="number"
-                    step="0.01"
-                    value={listPrice}
-                    onChange={(e) => setListPrice(e.target.value)}
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Title &amp; Slugs</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <Label htmlFor="itemTitle">Listing Title</Label>
-                <Input
-                  id="itemTitle"
-                  value={itemTitle}
-                  onChange={(e) => setItemTitle(e.target.value)}
-                  placeholder="AI or manual listing title"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="slug">Slug</Label>
-                  <Input
-                    id="slug"
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value)}
-                    placeholder={getBaseSlug() || "auto-from-title"}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="fullSlug">Full Slug</Label>
-                  <Input
-                    id="fullSlug"
-                    value={fullSlug}
-                    onChange={(e) => setFullSlug(e.target.value)}
-                    placeholder={getBaseSlug() || "auto-from-title"}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* MIDDLE: AI, SEO, Identity */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2">
-              <CardTitle>AI Curator</CardTitle>
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleAiCurate}
-                disabled={isCallingAi}
+            <div>
+              <label className="text-sm font-medium">Grade</label>
+              <select
+                className="border rounded px-3 py-2 w-full"
+                value={grade}
+                onChange={(e) => setGrade(e.target.value)}
               >
-                {isCallingAi ? "Curating…" : "Run AI Curator"}
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <Label htmlFor="aiQuickFacts">AI Quick Facts</Label>
-                <Textarea
-                  id="aiQuickFacts"
-                  value={aiQuickFacts}
-                  onChange={(e) => setAiQuickFacts(e.target.value)}
-                  rows={4}
-                  placeholder="Short bullets or paragraph for print card, Whatnot, etc."
-                />
-              </div>
+                <option value="A">A (Excellent)</option>
+                <option value="B">B (Good)</option>
+                <option value="C">C (Fair)</option>
+                <option value="D">D (Project)</option>
+              </select>
+            </div>
 
-              <div>
-                <Label htmlFor="searchKeywords">
-                  Search Keywords (comma or line separated)
-                </Label>
-                <Textarea
-                  id="searchKeywords"
-                  value={searchKeywordsRaw}
-                  onChange={(e) => setSearchKeywordsRaw(e.target.value)}
-                  rows={3}
-                  placeholder="lv, monogram, brown, tote, shoulder bag…"
-                />
-              </div>
-            </CardContent>
-          </Card>
+            <div>
+              <label className="text-sm font-medium">Status</label>
+              <select
+                className="border rounded px-3 py-2 w-full"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="intake">Intake</option>
+                <option value="ready">Ready</option>
+                <option value="listed">Listed</option>
+                <option value="sold">Sold</option>
+              </select>
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>SEO JSON (seo jsonb)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                value={seoRaw}
-                onChange={(e) => setSeoRaw(e.target.value)}
-                rows={10}
-                className="font-mono text-xs"
+            <div>
+              <label className="text-sm font-medium">Item Number (SKU)</label>
+              <Input
+                value={itemNumber}
+                onChange={(e) => setItemNumber(e.target.value)}
+                placeholder="Generated or manual"
               />
-            </CardContent>
-          </Card>
-        </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Base slug: <code>{baseSlug || "-"}</code>
+                <br />
+                Full slug: <code>{fullSlug || "-"}</code>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* RIGHT: Identity + Notes + System */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Identity JSON (identity jsonb)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                value={identityRaw}
-                onChange={(e) => setIdentityRaw(e.target.value)}
-                rows={12}
-                className="font-mono text-xs"
+        <Card>
+          <CardHeader>
+            <CardTitle>Identity (Attributes)</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="text-sm font-medium">Submodel</label>
+              <Input
+                value={identity.submodel}
+                onChange={(e) =>
+                  setIdentity({ ...identity, submodel: e.target.value })
+                }
+                placeholder="e.g. Monogram Canvas"
               />
-            </CardContent>
-          </Card>
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Notes &amp; System</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <Label htmlFor="imagePlaceholderUrl">
-                  Image Placeholder URL
-                </Label>
-                <Input
-                  id="imagePlaceholderUrl"
-                  value={imagePlaceholderUrl}
-                  onChange={(e) => setImagePlaceholderUrl(e.target.value)}
-                  placeholder="Optional placeholder image URL"
-                />
-              </div>
-              <div>
-                <Label htmlFor="notes">Internal Notes</Label>
-                <Textarea
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={4}
-                  placeholder="Restoration notes, defects, internal comments…"
-                />
-              </div>
+            <div>
+              <label className="text-sm font-medium">Variant</label>
+              <Input
+                value={identity.variant}
+                onChange={(e) =>
+                  setIdentity({ ...identity, variant: e.target.value })
+                }
+                placeholder="PM / MM / GM"
+              />
+            </div>
 
-              <Separator />
+            <div>
+              <label className="text-sm font-medium">Material</label>
+              <Input
+                value={identity.material}
+                onChange={(e) =>
+                  setIdentity({ ...identity, material: e.target.value })
+                }
+                placeholder="Canvas / Leather / Nylon etc."
+              />
+            </div>
 
-              <div className="flex flex-col gap-2">
-                <Button
-                  type="submit"
-                  disabled={disabled}
-                  className="w-full"
-                >
-                  {isSaving ? "Saving…" : "Save Item"}
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Saving will write to Supabase (including identity/seo JSONB
-                  and search_keywords[]) and then redirect you to{" "}
-                  <code>/item/[full_slug]</code> when available.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+            <div>
+              <label className="text-sm font-medium">Color</label>
+              <Input
+                value={identity.color}
+                onChange={(e) =>
+                  setIdentity({ ...identity, color: e.target.value })
+                }
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Pattern</label>
+              <Input
+                value={identity.pattern}
+                onChange={(e) =>
+                  setIdentity({ ...identity, pattern: e.target.value })
+                }
+                placeholder="Monogram / Damier / Solid etc."
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Hardware</label>
+              <Input
+                value={identity.hardware}
+                onChange={(e) =>
+                  setIdentity({ ...identity, hardware: e.target.value })
+                }
+                placeholder="Gold / Silver / Brass etc."
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Gender</label>
+              <Input
+                value={identity.gender}
+                onChange={(e) =>
+                  setIdentity({ ...identity, gender: e.target.value })
+                }
+                placeholder="Women's / Men's / Unisex"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Size</label>
+              <Input
+                value={identity.size}
+                onChange={(e) =>
+                  setIdentity({ ...identity, size: e.target.value })
+                }
+                placeholder="Dimensions or general sizing"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Era</label>
+              <Input
+                value={identity.era}
+                onChange={(e) =>
+                  setIdentity({ ...identity, era: e.target.value })
+                }
+                placeholder="Vintage / Y2K / Modern"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Origin</label>
+              <Input
+                value={identity.origin}
+                onChange={(e) =>
+                  setIdentity({ ...identity, origin: e.target.value })
+                }
+                placeholder="Country of origin"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Notes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={4}
+              placeholder="Internal notes for cleaning, restoration, issues, etc."
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>SEO / Listing Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">SEO Title</label>
+              <Input
+                value={seo.title}
+                onChange={(e) => setSeo({ ...seo, title: e.target.value })}
+                placeholder="AI will auto-generate"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">SEO Subtitle</label>
+              <Input
+                value={seo.subtitle}
+                onChange={(e) =>
+                  setSeo({ ...seo, subtitle: e.target.value })
+                }
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">SEO Bullets</label>
+              <Textarea
+                value={seo.bullets.join("\n")}
+                onChange={(e) =>
+                  setSeo({
+                    ...seo,
+                    bullets: e.target.value.split("\n"),
+                  })
+                }
+                rows={4}
+                placeholder="Each line = a bullet point"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">SEO Description</label>
+              <Textarea
+                value={seo.description}
+                onChange={(e) =>
+                  setSeo({ ...seo, description: e.target.value })
+                }
+                rows={4}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Search Keywords</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Textarea
+              value={searchKeywords.join(", ")}
+              onChange={(e) =>
+                setSearchKeywords(
+                  e.target.value
+                    .split(",")
+                    .map((k) => k.trim())
+                    .filter(Boolean)
+                )
+              }
+              rows={3}
+              placeholder="comma, separated, keywords"
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Image Placeholder</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Input
+              value={imagePlaceholderUrl}
+              onChange={(e) => setImagePlaceholderUrl(e.target.value)}
+              placeholder="Optional image URL or leave blank"
+            />
+          </CardContent>
+        </Card>
+
+        <div className="flex flex-col gap-4">
+          <Button
+            type="button"
+            disabled={isGeneratingSku}
+            onClick={handleGenerateSku}
+          >
+            {isGeneratingSku ? "Generating..." : "Generate SKU"}
+          </Button>
+
+          <Button
+            type="button"
+            disabled={isCallingAi}
+            onClick={handleAi}
+          >
+            {isCallingAi ? "AI is thinking..." : "Run AI"}
+          </Button>
+
+          <Button
+            type="submit"
+            disabled={isSaving}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            {isSaving ? "Saving..." : "Save Item"}
+          </Button>
         </div>
       </form>
     </div>
