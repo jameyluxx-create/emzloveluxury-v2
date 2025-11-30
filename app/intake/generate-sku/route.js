@@ -1,90 +1,53 @@
-// app/api/intake/generate-sku/route.js
-
 import { NextResponse } from "next/server";
-
-function toSlug(value) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)+/g, "");
-}
-
-function makeTimestampCode(date = new Date()) {
-  const pad = (n) => n.toString().padStart(2, "0");
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hour = pad(date.getHours());
-  const minute = pad(date.getMinutes());
-  const second = pad(date.getSeconds());
-  return `${year}${month}${day}-${hour}${minute}${second}`;
-}
-
-function makeRandomCode(len = 3) {
-  return Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, len);
-}
+import { createClient } from "@supabase/supabase-js";
 
 export async function POST(req) {
   try {
     const body = await req.json();
+    const { brand, model } = body;
 
-    const {
-      item_number: existingItemNumber,
-      brand = "",
-      category = "",
-      model = "",
-      submodel = "",
-      variant = "",
-    } = body || {};
+    if (!brand || !model) {
+      return NextResponse.json(
+        { error: "Brand and model are required." },
+        { status: 400 }
+      );
+    }
 
-    // --- ITEM NUMBER (SKU) ---
-    // Pattern: BRANDCAT-YYYYMMDD-HHMMSS-RND
-    // Example: LVW-20251130-142305-7KQ
-    const brandCode = (brand || "EMZ")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .slice(0, 3) || "EMZ";
-
-    const catCode = (category || "X")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .slice(0, 1) || "X";
-
-    const tsCode = makeTimestampCode();
-    const rndCode = makeRandomCode(3);
-
-    const generatedItemNumber = `${brandCode}${catCode}-${tsCode}-${rndCode}`;
-
-    const finalItemNumber =
-      existingItemNumber && existingItemNumber.trim().length > 0
-        ? existingItemNumber.trim()
-        : generatedItemNumber;
-
-    // --- SLUGS ---
-    // Base for slug: brand + model + submodel + variant
-    const nameParts = [brand, model, submodel, variant].filter(Boolean).join(" ");
-    const baseName = nameParts || finalItemNumber;
-
-    const slugBase = toSlug(baseName);
-    const slug = slugBase || toSlug(finalItemNumber);
-    const full_slug = slug; // If you later want nested paths, adjust here.
-
-    return NextResponse.json(
-      {
-        item_number: finalItemNumber,
-        slug,
-        full_slug,
-      },
-      { status: 200 }
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
     );
+
+    const prefix =
+      `${brand} ${model}`
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, "-")
+        .split("-")
+        .slice(0, 2)
+        .join("-") || "GEN";
+
+    const { data, error } = await supabase
+      .from("items")
+      .select("item_number")
+      .like("item_number", `${prefix}%`)
+      .order("item_number", { ascending: false })
+      .limit(1);
+
+    if (error) throw error;
+
+    let nextNum = 1;
+    if (data && data.length > 0) {
+      const last = data[0].item_number;
+      const parts = last.split("-");
+      const num = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(num)) nextNum = num + 1;
+    }
+
+    const itemNumber = `${prefix}-${String(nextNum).padStart(3, "0")}`;
+    return NextResponse.json({ itemNumber });
   } catch (err) {
-    console.error("Error in /api/intake/generate-sku:", err);
     return NextResponse.json(
-      {
-        error: "Failed to generate SKU",
-        details: err?.message ?? "Unknown error",
-      },
+      { error: err.message || "Failed to generate SKU." },
       { status: 500 }
     );
   }
