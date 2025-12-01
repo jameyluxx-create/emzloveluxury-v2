@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 "use client";
 
 import { useCallback, useState } from "react";
@@ -8,13 +10,9 @@ import MainImageUploader from "@/components/upload/MainImageUploader";
 import DetailImageUploader from "@/components/upload/DetailImageUploader";
 import ImagePreviewGrid from "@/components/upload/ImagePreviewGrid";
 
-// Disable static pre-rendering for this dynamic form page
-export const dynamic = "force-dynamic";
-
 // Safe fetch wrapper
 async function safeFetch(url, options = {}) {
   try {
-    // ensure JSON content-type when sending a body and no Content-Type provided
     if (options?.body) {
       options.headers = {
         "Content-Type": "application/json",
@@ -35,7 +33,6 @@ async function safeFetch(url, options = {}) {
       return data;
     }
 
-    // fall back to plain text
     return await res.text();
   } catch (err) {
     throw new Error(err?.message || String(err));
@@ -60,7 +57,6 @@ export default function IntakePage() {
   const [isCallingAi, setIsCallingAi] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // helper to accept either a string URL or { url }
   const toUrl = useCallback((img) => {
     if (!img) return null;
     if (typeof img === "string") return img;
@@ -95,7 +91,6 @@ export default function IntakePage() {
 
       if (result.identity) setIdentity((prev) => ({ ...prev, ...result.identity }));
       if (result.seo) setSeo((prev) => ({ ...prev, ...result.seo }));
-      // accept either camelCase or snake_case
       if (result.searchKeywords) setSearchKeywords(result.searchKeywords);
       if (result.search_keywords) setSearchKeywords(result.search_keywords);
 
