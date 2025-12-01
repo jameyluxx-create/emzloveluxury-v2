@@ -8,6 +8,9 @@ import MainImageUploader from "@/components/upload/MainImageUploader";
 import DetailImageUploader from "@/components/upload/DetailImageUploader";
 import ImagePreviewGrid from "@/components/upload/ImagePreviewGrid";
 
+// Disable static pre-rendering for this dynamic form page
+export const dynamic = "force-dynamic";
+
 // Safe fetch wrapper
 async function safeFetch(url, options = {}) {
   try {
