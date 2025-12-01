@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useImageCompression } from "./useImageCompression";
 
-export default function DetailImagesUploader({
+export default function DetailImageUploader({
   detailImages,
   setDetailImages,
 }) {
@@ -51,7 +51,7 @@ export default function DetailImagesUploader({
       }
     }
 
-    setDetailImages([...detailImages, ...uploadedUrls].slice(0, 10));
+    setDetailImage([...detailImages, ...uploadedUrls].slice(0, 10));
 
     setUploading(false);
   }
