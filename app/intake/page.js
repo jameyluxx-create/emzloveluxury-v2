@@ -16,7 +16,7 @@ import {
 import { toast } from "sonner";
 import { intakeSchema } from "@/lib/validation/intake";
 
-// -------- SAFE FETCH WITH DEBUGGING --------
+// -------- SAFE FETCH WITH DEBUGGING (PURE JS) --------
 async function safeFetch(url, payload) {
   try {
     const res = await fetch(url, {
@@ -28,7 +28,7 @@ async function safeFetch(url, payload) {
     });
 
     const text = await res.text();
-    let data: any = null;
+    let data = null;
 
     try {
       data = text ? JSON.parse(text) : null;
@@ -45,7 +45,7 @@ async function safeFetch(url, payload) {
     }
 
     return data;
-  } catch (err: any) {
+  } catch (err) {
     console.error("safeFetch error for", url, err);
     if (typeof window !== "undefined") {
       alert(`Error calling ${url}: ${err.message || "Unknown error"}`);
@@ -138,7 +138,7 @@ export default function IntakePage() {
       if (!result?.itemNumber) throw new Error("Invalid SKU response");
       setItemNumber(result.itemNumber);
       toast.success("SKU generated");
-    } catch (err: any) {
+    } catch (err) {
       toast.error(err.message || "Failed to generate SKU");
     } finally {
       setIsGeneratingSku(false);
@@ -166,7 +166,7 @@ export default function IntakePage() {
       if (result.searchKeywords) setSearchKeywords(result.searchKeywords);
 
       toast.success("AI data generated");
-    } catch (err: any) {
+    } catch (err) {
       toast.error(err.message || "AI generation failed");
     } finally {
       setIsCallingAi(false);
@@ -200,7 +200,7 @@ export default function IntakePage() {
       if (!result?.full_slug) throw new Error("Invalid save response");
       toast.success("Saved");
       router.push(`/item/${result.full_slug}`);
-    } catch (err: any) {
+    } catch (err) {
       toast.error(err.message || "Save failed");
     } finally {
       setIsSaving(false);
