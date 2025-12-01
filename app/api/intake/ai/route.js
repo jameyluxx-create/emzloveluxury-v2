@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
-// Make sure you have OPENAI_API_KEY in your environment (.env.local)
+// Make sure you have OPENAI_API_KEY in your environment (Vercel + .env.local)
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -23,9 +23,15 @@ export async function POST(req) {
   try {
     const body = await req.json();
 
+    // New intake payload shape
     const {
       brand = "",
       model = "",
+      identity: incomingIdentity = null,
+      notes = "",
+      seo: incomingSeo = null,
+      searchKeywords: incomingSearchKeywords = [],
+      // support older fields too, just in case
       submodel = "",
       variant = "",
       category = "",
@@ -33,26 +39,43 @@ export async function POST(req) {
       material = "",
       size = "",
       condition_grade = "",
-      notes = "",
       existingIdentity = null,
       existingSeo = null,
     } = body || {};
 
-    // Base description for AI
+    // Merge any old-style identity into the main identity blob
+    const identityObj =
+      safeParseJSON(incomingIdentity, {}) ||
+      safeParseJSON(existingIdentity, {}) ||
+      {};
+
+    const seoObj =
+      safeParseJSON(incomingSeo, {}) ||
+      safeParseJSON(existingSeo, {}) ||
+      {};
+
+    const searchKeywords =
+      Array.isArray(incomingSearchKeywords) && incomingSearchKeywords.length
+        ? incomingSearchKeywords
+        : [];
+
+    // Build a base description for the AI
     const baseDescription = `
 Brand: ${brand || "N/A"}
 Model: ${model || "N/A"}
-Submodel: ${submodel || "N/A"}
-Variant: ${variant || "N/A"}
-Category: ${category || "N/A"}
-Color: ${color || "N/A"}
-Material: ${material || "N/A"}
-Size / Dimensions: ${size || "N/A"}
-Condition Grade: ${condition_grade || "N/A"}
+Submodel: ${submodel || identityObj.submodel || "N/A"}
+Variant: ${variant || identityObj.variant || "N/A"}
+Category: ${category || identityObj.category || "N/A"}
+Color: ${color || identityObj.color || "N/A"}
+Material: ${material || identityObj.material || "N/A"}
+Size / Dimensions: ${size || identityObj.size || "N/A"}
+Condition Grade: ${condition_grade || identityObj.condition_grade || "N/A"}
 Internal Notes: ${notes || "N/A"}
+Existing Search Keywords: ${
+      searchKeywords.length ? searchKeywords.join(", ") : "None"
+    }
 `.trim();
 
-    // We give the model a very strict JSON contract
     const systemPrompt = `
 You are an expert luxury resale copywriter and product taxonomist for EMZLoveLuxury.
 You output STRICT machine-readable JSON only, no markdown, no prose.
@@ -68,10 +91,10 @@ ${baseDescription}
 Use or refine any existing identity / SEO data if present:
 
 Existing identity JSON (may be null):
-${JSON.stringify(existingIdentity, null, 2)}
+${JSON.stringify(identityObj, null, 2)}
 
 Existing SEO JSON (may be null):
-${JSON.stringify(existingSeo, null, 2)}
+${JSON.stringify(seoObj, null, 2)}
 
 You must respond ONLY with strict JSON, in this exact shape:
 
@@ -144,6 +167,7 @@ IMPORTANT:
     });
 
     const raw = completion.choices?.[0]?.message?.content || "{}";
+
     let parsed;
     try {
       parsed = JSON.parse(raw);
@@ -158,20 +182,25 @@ IMPORTANT:
       );
     }
 
-    const identity = parsed.identity || {};
-    const seo = parsed.seo || {};
-    const search_keywords = Array.isArray(parsed.search_keywords)
+    const outIdentity = parsed.identity || {};
+    const outSeo = parsed.seo || {};
+    const outSearchKeywords = Array.isArray(parsed.search_keywords)
       ? parsed.search_keywords
       : [];
-    const quick_facts = parsed.quick_facts || "";
-    const title = parsed.title || seo.title || "";
 
+    const quick_facts = parsed.quick_facts || "";
+    const title = parsed.title || outSeo.title || "";
+
+    // IMPORTANT: match the frontend expectations:
+    // - identity
+    // - seo
+    // - searchKeywords (camelCase)
     return NextResponse.json(
       {
-        identity,
-        seo,
-        search_keywords,
-        quick_facts,
+        identity: outIdentity,
+        seo: outSeo,
+        searchKeywords: outSearchKeywords,
+        quickFacts: quick_facts,
         title,
       },
       { status: 200 }
