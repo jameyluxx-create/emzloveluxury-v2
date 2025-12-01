@@ -10,7 +10,7 @@ export const intakeSchema = z.object({
   status: z.string().default("intake"),
   grade: z.string().default("B"),
 
-  identity: z.record(z.any()).default({}),
+  identity: z.any().default({}),
   seo: z
     .object({
       title: z.string().optional(),
