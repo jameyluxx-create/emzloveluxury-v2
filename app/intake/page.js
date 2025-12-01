@@ -209,322 +209,402 @@ export default function IntakePage() {
 
   // -------- RENDER --------
 
+  const hasSummary = Boolean(brand || model || itemNumber);
+
   return (
-    <div className="container mx-auto py-10 max-w-4xl">
-      <h1 className="text-3xl font-bold mb-6">Intake</h1>
-
-      <form onSubmit={handleSave} className="space-y-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Item Basics</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="min-h-screen bg-slate-50">
+      <div className="container mx-auto max-w-4xl py-8 pb-28">
+        {/* Page header + quick summary */}
+        <header className="mb-6 flex flex-col gap-3 border-b border-slate-200 pb-4">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <label className="text-sm font-medium">Brand</label>
-              <Input
-                value={brand}
-                onChange={(e) => setBrand(e.target.value)}
-                placeholder="e.g. Louis Vuitton"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Model</label>
-              <Input
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="e.g. Neverfull MM"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Grade</label>
-              <select
-                className="border rounded px-3 py-2 w-full"
-                value={grade}
-                onChange={(e) => setGrade(e.target.value)}
-              >
-                <option value="A">A (Excellent)</option>
-                <option value="B">B (Good)</option>
-                <option value="C">C (Fair)</option>
-                <option value="D">D (Project)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Status</label>
-              <select
-                className="border rounded px-3 py-2 w-full"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                <option value="intake">Intake</option>
-                <option value="ready">Ready</option>
-                <option value="listed">Listed</option>
-                <option value="sold">Sold</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Item Number (SKU)</label>
-              <Input
-                value={itemNumber}
-                onChange={(e) => setItemNumber(e.target.value)}
-                placeholder="Generated or manual"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Base slug: <code>{baseSlug || "-"}</code>
-                <br />
-                Full slug: <code>{fullSlug || "-"}</code>
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+                Intake
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">
+                EMZLove Luxury · fast intake, clean data, perfect listings.
               </p>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Identity (Attributes)</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="text-sm font-medium">Submodel</label>
-              <Input
-                value={identity.submodel}
-                onChange={(e) =>
-                  setIdentity({ ...identity, submodel: e.target.value })
-                }
+            {hasSummary && (
+              <div className="hidden rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-right text-xs md:block">
+                <div className="font-semibold text-amber-900">
+                  {brand || "—"} {model || ""}
+                </div>
+                <div className="mt-0.5 text-amber-800">
+                  SKU: {itemNumber || "not generated"}
+                </div>
+                <div className="mt-0.5 text-amber-700">
+                  Grade {grade} · {status}
+                </div>
+              </div>
+            )}
+          </div>
+        </header>
+
+        <form onSubmit={handleSave} className="space-y-6">
+          {/* ITEM BASICS */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold text-slate-900">
+                Item Basics
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600">
+                  Brand
+                </label>
+                <Input
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                  placeholder="e.g. Louis Vuitton"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600">
+                  Model
+                </label>
+                <Input
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="e.g. Neverfull MM"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600">
+                  Grade
+                </label>
+                <select
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none ring-emerald-500/0 transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                  value={grade}
+                  onChange={(e) => setGrade(e.target.value)}
+                >
+                  <option value="A">A (Excellent)</option>
+                  <option value="B">B (Good)</option>
+                  <option value="C">C (Fair)</option>
+                  <option value="D">D (Project)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600">
+                  Status
+                </label>
+                <select
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none ring-emerald-500/0 transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                >
+                  <option value="intake">Intake</option>
+                  <option value="ready">Ready</option>
+                  <option value="listed">Listed</option>
+                  <option value="sold">Sold</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600">
+                  Item Number (SKU)
+                </label>
+                <Input
+                  value={itemNumber}
+                  onChange={(e) => setItemNumber(e.target.value)}
+                  placeholder="Generated or manual"
+                />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Base slug:{" "}
+                  <code className="rounded bg-slate-100 px-1 py-0.5">
+                    {baseSlug || "-"}
+                  </code>{" "}
+                  · Full slug:{" "}
+                  <code className="rounded bg-slate-100 px-1 py-0.5">
+                    {fullSlug || "-"}
+                  </code>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* IDENTITY */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold text-slate-900">
+                Identity (Attributes)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Field
+                label="Submodel"
                 placeholder="e.g. Monogram Canvas"
+                value={identity.submodel}
+                onChange={(v) => setIdentity({ ...identity, submodel: v })}
               />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Variant</label>
-              <Input
-                value={identity.variant}
-                onChange={(e) =>
-                  setIdentity({ ...identity, variant: e.target.value })
-                }
+              <Field
+                label="Variant"
                 placeholder="PM / MM / GM"
+                value={identity.variant}
+                onChange={(v) => setIdentity({ ...identity, variant: v })}
               />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Material</label>
-              <Input
-                value={identity.material}
-                onChange={(e) =>
-                  setIdentity({ ...identity, material: e.target.value })
-                }
+              <Field
+                label="Material"
                 placeholder="Canvas / Leather / Nylon etc."
+                value={identity.material}
+                onChange={(v) => setIdentity({ ...identity, material: v })}
               />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Color</label>
-              <Input
+              <Field
+                label="Color"
                 value={identity.color}
-                onChange={(e) =>
-                  setIdentity({ ...identity, color: e.target.value })
-                }
+                onChange={(v) => setIdentity({ ...identity, color: v })}
               />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Pattern</label>
-              <Input
-                value={identity.pattern}
-                onChange={(e) =>
-                  setIdentity({ ...identity, pattern: e.target.value })
-                }
+              <Field
+                label="Pattern"
                 placeholder="Monogram / Damier / Solid etc."
+                value={identity.pattern}
+                onChange={(v) => setIdentity({ ...identity, pattern: v })}
               />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Hardware</label>
-              <Input
-                value={identity.hardware}
-                onChange={(e) =>
-                  setIdentity({ ...identity, hardware: e.target.value })
-                }
+              <Field
+                label="Hardware"
                 placeholder="Gold / Silver / Brass etc."
+                value={identity.hardware}
+                onChange={(v) => setIdentity({ ...identity, hardware: v })}
               />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Gender</label>
-              <Input
-                value={identity.gender}
-                onChange={(e) =>
-                  setIdentity({ ...identity, gender: e.target.value })
-                }
+              <Field
+                label="Gender"
                 placeholder="Women's / Men's / Unisex"
+                value={identity.gender}
+                onChange={(v) => setIdentity({ ...identity, gender: v })}
               />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Size</label>
-              <Input
-                value={identity.size}
-                onChange={(e) =>
-                  setIdentity({ ...identity, size: e.target.value })
-                }
+              <Field
+                label="Size"
                 placeholder="Dimensions or general sizing"
+                value={identity.size}
+                onChange={(v) => setIdentity({ ...identity, size: v })}
               />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Era</label>
-              <Input
-                value={identity.era}
-                onChange={(e) =>
-                  setIdentity({ ...identity, era: e.target.value })
-                }
+              <Field
+                label="Era"
                 placeholder="Vintage / Y2K / Modern"
+                value={identity.era}
+                onChange={(v) => setIdentity({ ...identity, era: v })}
               />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Origin</label>
-              <Input
-                value={identity.origin}
-                onChange={(e) =>
-                  setIdentity({ ...identity, origin: e.target.value })
-                }
+              <Field
+                label="Origin"
                 placeholder="Country of origin"
+                value={identity.origin}
+                onChange={(v) => setIdentity({ ...identity, origin: v })}
               />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={4}
-              placeholder="Internal notes for cleaning, restoration, issues, etc."
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>SEO / Listing Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">SEO Title</label>
-              <Input
-                value={seo.title}
-                onChange={(e) => setSeo({ ...seo, title: e.target.value })}
-                placeholder="AI will auto-generate"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">SEO Subtitle</label>
-              <Input
-                value={seo.subtitle}
-                onChange={(e) =>
-                  setSeo({ ...seo, subtitle: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">SEO Bullets</label>
+          {/* NOTES */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold text-slate-900">
+                Notes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600">
+                Internal notes
+              </label>
               <Textarea
-                value={seo.bullets.join("\n")}
-                onChange={(e) =>
-                  setSeo({
-                    ...seo,
-                    bullets: e.target.value.split("\n"),
-                  })
-                }
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
                 rows={4}
-                placeholder="Each line = a bullet point"
+                placeholder="Internal notes for cleaning, restoration, issues, etc."
+                className="resize-none"
               />
-            </div>
+            </CardContent>
+          </Card>
 
-            <div>
-              <label className="text-sm font-medium">SEO Description</label>
+          {/* SEO / LISTING DETAILS */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold text-slate-900">
+                SEO / Listing Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <LabelSmall>SEO Title</LabelSmall>
+                <Input
+                  value={seo.title}
+                  onChange={(e) => setSeo({ ...seo, title: e.target.value })}
+                  placeholder="AI will auto-generate"
+                />
+              </div>
+
+              <div>
+                <LabelSmall>SEO Subtitle</LabelSmall>
+                <Input
+                  value={seo.subtitle}
+                  onChange={(e) =>
+                    setSeo({ ...seo, subtitle: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <LabelSmall>SEO Bullets</LabelSmall>
+                <Textarea
+                  value={seo.bullets.join("\n")}
+                  onChange={(e) =>
+                    setSeo({
+                      ...seo,
+                      bullets: e.target.value.split("\n"),
+                    })
+                  }
+                  rows={4}
+                  placeholder="Each line = a bullet point"
+                  className="resize-none"
+                />
+              </div>
+
+              <div>
+                <LabelSmall>SEO Description</LabelSmall>
+                <Textarea
+                  value={seo.description}
+                  onChange={(e) =>
+                    setSeo({ ...seo, description: e.target.value })
+                  }
+                  rows={4}
+                  className="resize-none"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* SEARCH KEYWORDS */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold text-slate-900">
+                Search Keywords
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <LabelSmall>Keywords</LabelSmall>
               <Textarea
-                value={seo.description}
+                value={searchKeywords.join(", ")}
                 onChange={(e) =>
-                  setSeo({ ...seo, description: e.target.value })
+                  setSearchKeywords(
+                    e.target.value
+                      .split(",")
+                      .map((k) => k.trim())
+                      .filter(Boolean)
+                  )
                 }
-                rows={4}
+                rows={3}
+                placeholder="comma, separated, keywords"
+                className="resize-none"
               />
+            </CardContent>
+          </Card>
+
+          {/* IMAGE PLACEHOLDER */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold text-slate-900">
+                Image Placeholder
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <LabelSmall>Image URL</LabelSmall>
+              <Input
+                value={imagePlaceholderUrl}
+                onChange={(e) => setImagePlaceholderUrl(e.target.value)}
+                placeholder="Optional image URL or leave blank"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                Upload pipeline coming next – for now you can paste a hosted
+                image URL or leave this blank.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Sticky action bar */}
+          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4">
+            <div className="pointer-events-auto w-full max-w-4xl rounded-2xl border border-slate-200 bg-slate-50/95 p-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-slate-50/80">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs text-slate-600">
+                  {brand || model ? (
+                    <>
+                      <span className="font-semibold text-slate-900">
+                        {brand || "—"} {model || ""}
+                      </span>
+                      {itemNumber && (
+                        <>
+                          {" "}
+                          · <span>SKU {itemNumber}</span>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    "Start with brand + model, then generate SKU & AI details."
+                  )}
+                </div>
+                <div className="hidden text-[11px] text-slate-500 md:block">
+                  All changes save to Supabase · EMZLoveLuxury
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 md:flex-row">
+                <Button
+                  type="button"
+                  disabled={isGeneratingSku}
+                  onClick={handleGenerateSku}
+                  className="flex-1 border border-slate-900 bg-slate-900 text-xs font-semibold tracking-wide text-white hover:bg-slate-800"
+                >
+                  {isGeneratingSku ? "Generating SKU…" : "Generate SKU"}
+                </Button>
+
+                <Button
+                  type="button"
+                  disabled={isCallingAi}
+                  onClick={handleAi}
+                  className="flex-1 border border-slate-900 bg-slate-900 text-xs font-semibold tracking-wide text-white hover:bg-slate-800"
+                >
+                  {isCallingAi ? "AI is thinking…" : "Run AI"}
+                </Button>
+
+                <Button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex-1 bg-emerald-600 text-xs font-semibold tracking-wide text-white hover:bg-emerald-700"
+                >
+                  {isSaving ? "Saving…" : "Save Item"}
+                </Button>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Search Keywords</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Textarea
-              value={searchKeywords.join(", ")}
-              onChange={(e) =>
-                setSearchKeywords(
-                  e.target.value
-                    .split(",")
-                    .map((k) => k.trim())
-                    .filter(Boolean)
-                )
-              }
-              rows={3}
-              placeholder="comma, separated, keywords"
-            />
-          </CardContent>
-        </Card>
+/** Small helper label component */
+function LabelSmall({ children }) {
+  return (
+    <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600">
+      {children}
+    </label>
+  );
+}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Image Placeholder</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Input
-              value={imagePlaceholderUrl}
-              onChange={(e) => setImagePlaceholderUrl(e.target.value)}
-              placeholder="Optional image URL or leave blank"
-            />
-          </CardContent>
-        </Card>
-
-        <div className="flex flex-col gap-4">
-          <Button
-            type="button"
-            disabled={isGeneratingSku}
-            onClick={handleGenerateSku}
-          >
-            {isGeneratingSku ? "Generating..." : "Generate SKU"}
-          </Button>
-
-          <Button
-            type="button"
-            disabled={isCallingAi}
-            onClick={handleAi}
-          >
-            {isCallingAi ? "AI is thinking..." : "Run AI"}
-          </Button>
-
-          <Button
-            type="submit"
-            disabled={isSaving}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            {isSaving ? "Saving..." : "Save Item"}
-          </Button>
-        </div>
-      </form>
+/** Reusable field for the identity grid */
+function Field({ label, placeholder, value, onChange }) {
+  return (
+    <div>
+      <LabelSmall>{label}</LabelSmall>
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
     </div>
   );
 }
