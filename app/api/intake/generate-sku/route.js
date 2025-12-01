@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { brandCode, modelCode } from "@/lib/skuHelpers";
 import { fetchNextSequence } from "@/lib/sequence";
 
-function getSupabase() {
+function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -22,7 +22,7 @@ function getSupabase() {
 
 export async function POST(req) {
   try {
-    const supabase = getSupabase();
+    const supabase = getSupabaseAdmin();
 
     const { brand, model } = await req.json();
 
@@ -36,6 +36,7 @@ export async function POST(req) {
     const brandC = brandCode(brand);
     const modelC = modelCode(model);
 
+    // This will call the Postgres next_sequence() function
     const sequence = await fetchNextSequence(supabase, brandC, modelC);
 
     const itemNumber = `${brandC}-${modelC}-EMZ-${sequence}`;
@@ -58,3 +59,4 @@ export async function POST(req) {
     );
   }
 }
+
