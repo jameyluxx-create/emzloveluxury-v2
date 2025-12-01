@@ -16,18 +16,41 @@ import {
 import { toast } from "sonner";
 import { intakeSchema } from "@/lib/validation/intake";
 
-async function safeFetch(url, options) {
+// -------- SAFE FETCH WITH DEBUGGING --------
+async function safeFetch(url, payload) {
   try {
-    const res = await fetch(url, options);
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(text || "Request failed");
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: payload ? JSON.stringify(payload) : undefined,
+    });
+
+    const text = await res.text();
+    let data: any = null;
+
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      throw new Error(`Invalid JSON from ${url}: ${text}`);
     }
-    const data = await res.json();
-    if (data?.error) throw new Error(data.error);
+
+    if (!res.ok) {
+      throw new Error(data?.error || `Request failed (${res.status})`);
+    }
+
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+
     return data;
-  } catch (err) {
-    throw new Error(err.message || "Network error");
+  } catch (err: any) {
+    console.error("safeFetch error for", url, err);
+    if (typeof window !== "undefined") {
+      alert(`Error calling ${url}: ${err.message || "Unknown error"}`);
+    }
+    throw err;
   }
 }
 
@@ -101,18 +124,22 @@ export default function IntakePage() {
     updateFullSlug();
   }, [baseSlug, itemNumber]);
 
+  // -------- HANDLERS --------
+
   async function handleGenerateSku() {
     try {
       setIsGeneratingSku(true);
+
       const result = await safeFetch("/api/intake/generate-sku", {
-        method: "POST",
-        body: JSON.stringify({ brand, model }),
+        brand,
+        model,
       });
+
       if (!result?.itemNumber) throw new Error("Invalid SKU response");
       setItemNumber(result.itemNumber);
       toast.success("SKU generated");
-    } catch (err) {
-      toast.error(err.message);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate SKU");
     } finally {
       setIsGeneratingSku(false);
     }
@@ -121,6 +148,7 @@ export default function IntakePage() {
   async function handleAi() {
     try {
       setIsCallingAi(true);
+
       const payload = {
         brand,
         model,
@@ -129,18 +157,17 @@ export default function IntakePage() {
         seo,
         searchKeywords,
       };
-      const result = await safeFetch("/api/intake/ai", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
 
-      if (result.identity) setIdentity((prev) => ({ ...prev, ...result.identity }));
+      const result = await safeFetch("/api/intake/ai", payload);
+
+      if (result.identity)
+        setIdentity((prev) => ({ ...prev, ...result.identity }));
       if (result.seo) setSeo((prev) => ({ ...prev, ...result.seo }));
       if (result.searchKeywords) setSearchKeywords(result.searchKeywords);
 
       toast.success("AI data generated");
-    } catch (err) {
-      toast.error(err.message);
+    } catch (err: any) {
+      toast.error(err.message || "AI generation failed");
     } finally {
       setIsCallingAi(false);
     }
@@ -150,6 +177,7 @@ export default function IntakePage() {
     e.preventDefault();
     try {
       setIsSaving(true);
+
       const payload = {
         itemNumber,
         slug: baseSlug,
@@ -167,27 +195,25 @@ export default function IntakePage() {
 
       const parsed = intakeSchema.parse(payload);
 
-      const result = await safeFetch("/api/intake/save", {
-        method: "POST",
-        body: JSON.stringify(parsed),
-      });
+      const result = await safeFetch("/api/intake/save", parsed);
 
       if (!result?.full_slug) throw new Error("Invalid save response");
       toast.success("Saved");
       router.push(`/item/${result.full_slug}`);
-    } catch (err) {
-      toast.error(err.message);
+    } catch (err: any) {
+      toast.error(err.message || "Save failed");
     } finally {
       setIsSaving(false);
     }
   }
+
+  // -------- RENDER --------
 
   return (
     <div className="container mx-auto py-10 max-w-4xl">
       <h1 className="text-3xl font-bold mb-6">Intake</h1>
 
       <form onSubmit={handleSave} className="space-y-8">
-
         <Card>
           <CardHeader>
             <CardTitle>Item Basics</CardTitle>
